@@ -20,6 +20,7 @@ lib/
 lib64/
 parts/
 sdist/
+tendies_maker.egg-info/
 var/
 wheels/
 pip-wheel-metadata/
