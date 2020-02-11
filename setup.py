@@ -1,4 +1,5 @@
-from distutils.core import setup
+#from distutils.core import setup
+from setuptools import setup
 
 setup(
     name='tendies-maker',
@@ -8,5 +9,7 @@ setup(
     license='',
     author='jagolli',
     author_email='',
-    description=''
+    description="Let's make some sweet tendies",
+    install_requires=['seaborn','pandas','numpy','yfinance','matplotlib'],
+    python_requires='>=3'
 )
