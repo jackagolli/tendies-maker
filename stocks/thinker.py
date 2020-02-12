@@ -11,7 +11,13 @@ def scrape():
 
 
 def thinker(ticker, date, stock_data, options_data, scenario, *args):
-
+    """ get insight into specific option.
+    ticker = str of ticker
+    date = str of date (YYYY-MM-DD)
+    scenario = nominal, bullish, bearish
+    insight_date = date when news anticipated to affect stock price
+    duration = how long it will have an effect, multiple of weeks
+    """
     if args:
         insight_date = args[0]
         duration = args[1]
@@ -23,7 +29,7 @@ def thinker(ticker, date, stock_data, options_data, scenario, *args):
 
     # TODO determine which distribution fits data best? then determine probability of price point.
 
-    # Need high implied volatility. Need to print out standard deviation and the mean.
+    # TODO look for high implied volatility? for max profit.
     if scenario == 'nominal':
 
         dt = int((datetime.datetime.strptime(date, "%Y-%m-%d").date() - today).days)
@@ -63,8 +69,8 @@ def thinker(ticker, date, stock_data, options_data, scenario, *args):
     print(f"scenario = {scenario}")
     print('current price:', stock_data[ticker]['end_price'])
     print(f'predicted price on {date}:', x_f)
-    print(f'weekly_std = {weekly_std}, daily_mu = {daily_mu}, daily_std = {daily_std}')
+    print(f'weekly_std = {weekly_std} | daily_mu = {daily_mu} | daily_std = {daily_std}')
     print(f'expiration date is {date}')
-    print(options_data[date][['strike', 'lastPrice']])
+    print(options_data[date][['strike', 'lastPrice','impliedVolatility']])
 
     return None

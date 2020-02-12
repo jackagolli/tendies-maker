@@ -13,6 +13,7 @@ def plot(tickers, types, timespan, data):
                 sns.distplot(data[ticker][timespan]["pct_change"], kde=True, bins=100)
                 plt.title(ticker)
                 plt.ylabel('Frequency')
+                plt.xlabel('Daily % Change')
                 plt.show()
 
             elif plot_type == "percent_returns":

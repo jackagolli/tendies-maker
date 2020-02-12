@@ -45,11 +45,11 @@ def gatherStockData(tickers, time_span, interval):
     return data_dict
 
 def gatherOptionsData(ticker, days_from_today, type):
-
-    # data stored in yfinance.options:
-    # ['contractSymbol', 'lastTradeDate', 'strike', 'lastPrice', 'bid', 'ask', 'change', 'percentChange', 'volume',
-    # 'openInterest', 'impliedVolatility', 'inTheMoney', 'contractSize', 'currency']
-
+    """ data stored in yfinance.options:
+    ['contractSymbol', 'lastTradeDate', 'strike', 'lastPrice', 'bid', 'ask', 'change', 'percentChange', 'volume',
+    'openInterest', 'impliedVolatility', 'inTheMoney', 'contractSize', 'currency']
+    type = calls or puts
+    """
     data_dict = {}
     today = datetime.date.today()
     days_from_today[:] = [today + datetime.timedelta(days=dt) for dt in days_from_today]
