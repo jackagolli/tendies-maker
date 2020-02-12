@@ -17,10 +17,8 @@ def main():
     #stocks.thinker(ticker, date, stock_data, options_data, 'bullish', '2020-04-01', 2)
     stocks.thinker(ticker, date, stock_data, options_data, 'nominal')
 
-    # plot_types = ['histogram', 'percent_returns']
-    # stocks.plot(tickers, plot_types, "daily", stock_data)
-
-
+    plot_types = ['histogram', 'percent_returns']
+    stocks.plot(tickers, plot_types, "daily", stock_data)
 
 
 if __name__ == "__main__":

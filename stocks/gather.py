@@ -55,7 +55,7 @@ def gatherOptionsData(ticker, days_from_today, type):
     days_from_today[:] = [today + datetime.timedelta(days=dt) for dt in days_from_today]
     company = yf.Ticker(ticker)
     available_opts = company.options
-    print(available_opts)
+
     format_avail_opts = []
     for date in available_opts:
         format_avail_opts.append(datetime.datetime.strptime(date, "%Y-%m-%d").date())
