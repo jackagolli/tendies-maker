@@ -33,7 +33,6 @@ def thinker(ticker, date, stock_data, options_data, scenario, *args):
 
     # TODO determine which distribution fits data best? then determine probability of price point.
 
-    # TODO look for high implied volatility? for max profit.
     if scenario == 'nominal':
         # all days
         #dt = int((end_date - today).days)
@@ -41,7 +40,7 @@ def thinker(ticker, date, stock_data, options_data, scenario, *args):
         dt = np.busday_count(today, datetime.datetime.strptime(date, "%Y-%m-%d").date())
         # conservative outlook, use 75% of avg and BD only.
         mu = daily_mu * 0.75
-        mu = daily_mu
+        #mu = daily_mu
         x_f = latest_price * (1 + mu) ** dt
 
     # bullish news
