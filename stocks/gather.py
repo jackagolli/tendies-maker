@@ -3,12 +3,11 @@ import pandas as pd
 import numpy as np
 import datetime
 
-def gatherStockData(tickers, time_span, interval):
 
+def gatherStockData(tickers, time_span, interval):
     data_dict = {}
 
     for ticker in tickers:
-
         data_dict[ticker] = {}
         data_dict[ticker]["monthly"] = {}
         data_dict[ticker]["weekly"] = {}
@@ -46,6 +45,7 @@ def gatherStockData(tickers, time_span, interval):
 
     return data_dict
 
+
 def gatherOptionsData(ticker, days_from_today, type):
     """ data stored in yfinance.options:
     ['contractSymbol', 'lastTradeDate', 'strike', 'lastPrice', 'bid', 'ask', 'change', 'percentChange', 'volume',
@@ -72,13 +72,12 @@ def gatherOptionsData(ticker, days_from_today, type):
     return data_dict
 
 
-
 def gatherMulti(start_date, end_date, syms):
-
     data = yf.download(" ".join(syms), start=start_date, end=end_date)
     df = data['Close']
 
     return df
+
 
 def getPortolfio(tickers, shares):
     """
@@ -86,10 +85,10 @@ def getPortolfio(tickers, shares):
     """
     data = yf.download(" ".join(tickers), period="1d", interval="1m")
     df = data['Close'].iloc[[-5]]
-    df = df.append(pd.DataFrame(np.array([shares[i]*df[val][0] for i,val in enumerate(tickers)]).reshape(1,4),
-                                index=["values"],columns=tickers))
+    df = df.append(pd.DataFrame(np.array([shares[i] * df[val][0] for i, val in enumerate(tickers)]).reshape(1, 4),
+                                index=["values"], columns=tickers))
     total = df.sum(axis=1)[0]
-    df = df.append(pd.DataFrame(np.array([df[val][0]/total for i,val in enumerate(tickers)]).reshape(1,4),
+    df = df.append(pd.DataFrame(np.array([df[val][0] / total for i, val in enumerate(tickers)]).reshape(1, 4),
                                 index=["allocs"], columns=tickers))
 
     df = df.rename(index={f'{df.index.values[0]}': "current price"})

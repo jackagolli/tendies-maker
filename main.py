@@ -10,13 +10,13 @@ def main():
 
     tickers = ['AAPL', 'AMD', 'MSFT', 'SQ', 'AMAT']
     ticker = tickers[1]
-    days_from_today = [60, 180, 480]
+    days_from_today = [60, 90, 180, 480]
     # get stock data
     stock_data = stocks.gatherStockData(tickers, time_span="1y", interval="1d")
     # get options data
     options_data = stocks.gatherOptionsData(ticker, days_from_today, type="calls")
     viable_dates = list(options_data.keys())
-    date = viable_dates[0]
+    date = viable_dates[1]
     stocks.thinker(ticker, date, stock_data, options_data, 'bullish', '2020-06-01', 1)
     stocks.thinker(ticker, date, stock_data, options_data, 'nominal')
 
