@@ -7,29 +7,31 @@ import sys
 
 def main():
     # Options stuff
-
-    tickers = ['AAPL', 'AMD', 'MSFT', 'SQ', 'AMAT']
-    ticker = tickers[1]
-    days_from_today = [60, 90, 180, 480]
-    # get stock data
-    stock_data = stocks.gatherStockData(tickers, time_span="1y", interval="1d")
-    # get options data
-    options_data = stocks.gatherOptionsData(ticker, days_from_today, type="calls")
-    viable_dates = list(options_data.keys())
-    date = viable_dates[1]
-    stocks.thinker(ticker, date, stock_data, options_data, 'bullish', '2020-06-01', 1)
-    stocks.thinker(ticker, date, stock_data, options_data, 'nominal')
+    #
+    # tickers = ['AAPL', 'AMD', 'MSFT', 'SQ', 'AMAT']
+    # ticker = tickers[0]
+    # days_from_today = [60, 90, 150, 180, 240, 480]
+    # # get stock data
+    # stock_data = stocks.gatherStockData(tickers, time_span="1y", interval="1d")
+    # # get options data
+    # options_data = stocks.gatherOptionsData(ticker, days_from_today, type="calls")
+    # viable_dates = list(options_data.keys())
+    # date = viable_dates[2]
+    # # stocks.thinker(ticker, date, stock_data, options_data, 'bullish', '2020-06-01', 1)
+    # stocks.thinker(ticker, date, stock_data, options_data, 'nominal')
 
     # plot_types = ['histogram', 'percent_returns']
     # stocks.plot(tickers, plot_types, stock_data)
 
+    test = stocks.gatherMemeStocks()
+
     # Sharpe ratio stuff
 
-    # tickers = ['VOO','AAPL', 'AMD', 'MSFT', 'DIS','SWKS','AMAT','SQ','TEAM','AMZN','NVDA','GLD',
-    #            'INTC','GOOGL','SPCE','CRM','SHOP']
+    # tickers = ['VOO','AAPL', 'AMD', 'MSFT', 'DIS','SWKS','AMAT','SQ','TEAM','AMZN','NVDA',
+    #            'INTC','GOOGL','SPCE','CRM','MU','SHOP','NFLX','TSLA']
     #
-    # sd = dt.datetime(2020, 3, 20)
-    # ed = dt.datetime(2020, 6, 9)
+    # sd = dt.datetime(2020, 10, 1)
+    # ed = dt.datetime(2021, 1, 19)
     # start_val = 1000
     #
     # df = stocks.gatherMulti(start_date=sd, end_date=ed, syms=tickers)
@@ -49,13 +51,13 @@ def main():
     # sharpe_tickers = list(desired.keys())
     # allocs = list(desired.values())
     # print(f"Optimal allocations: {desired}")
-
-    # owned_tickers = ['AAPL','AMD','DIS','MSFT']
-    # shares = [3.700816,5.720861,2.405536,6.614406]
+    #
+    # owned_tickers = ['AAPL','MSFT','SQ','SHOP']
+    # shares = [3.684302,5.773128,10.601169,1.052782]
     # holdings = stocks.getPortolfio(owned_tickers,shares)
     # total = holdings.iloc[1].sum()
-    # new_tickers = ['AAPL','AMD','MSFT','SQ']
-    # new_allocs = [0.35,0.1,0.35,0.2]
+    # new_tickers = ['AAPL','MSFT','SQ','SHOP']
+    # new_allocs = [0.30,0.20,0.30,0.20]
     # buy_amount = 0
     # buys = stocks.calcPortfolio(new_tickers,new_allocs,total,buy_amount)
     # print(buys,sum(buys.values()))
