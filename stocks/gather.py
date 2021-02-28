@@ -2,10 +2,9 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import datetime
-from multiprocessing import Pool, cpu_count
-
-
-
+import multiprocessing as mp
+import requests
+import re
 
 def gatherStockData(tickers, time_span, interval):
     data_dict = {}
@@ -75,46 +74,46 @@ def gatherOptionsData(ticker, days_from_today, type):
     return data_dict
 
 
-# This function searches
-def gatherMemeStocks():
-    today = datetime.date.today()
-    all_stocks = pd.read_csv('data/nasdaq_stocks_filtered.csv', sep=',')
-    all_stocks = all_stocks['Symbol']
+def calcLargeMovers(tickers, data):
+    for x in tickers:
+        high = yf.Ticker(x).history(period="1mo")[['High']]
+        open = yf.Ticker(x).history(period="1mo")[['Open']]
+        change = (high - open.values) / open.values
+        if (change > 0.1).any()[0]:
+            data[x] = change
+        else:
+            pass
+    return data
 
-    all_stocks = all_stocks.to_numpy()
-    # initialize empty df with correct row indexes
+
+# This function searches
+def gatherHotStocks(tickers=None):
+    if not tickers:
+        tickers1 = pd.read_csv('data/nasdaq_stocks.csv', sep=',')
+        tickers2 = pd.read_csv('data/nyse_stocks.csv', sep=',')
+        tickers = pd.concat([tickers1, tickers2])
+        tickers = tickers['Symbol']
+
+    # today = datetime.date.today()
+    num_proc = mp.cpu_count() - 1
+    tickers = tickers.to_numpy()
+    tickers_split = np.array_split(tickers, num_proc)
+
+    # Initialize empty df with correct row date indexes
     data = yf.Ticker('AAPL').history(period="1mo")
-    data.drop(columns=['Open','High','Low','Close','Volume','Dividends','Stock Splits'], inplace=True)
+    data.drop(columns=['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock Splits'], inplace=True)
     i = 1
 
-    def calc_change(tickers, data):
-        for x in tickers:
-            high = yf.Ticker(x).history(period="1mo")[['High']]
-            open = yf.Ticker(x).history(period="1mo")[['Open']]
-            change = (high - open.values) / open.values
-            if (change > 0.1).any()[0]:
-                data[x] = change
-            else:
-                pass
-        return data
+    cases = [(stocks, data) for stocks in tickers_split]
+    pool = mp.Pool(num_proc)
+    results = pool.starmap(calcLargeMovers, cases)
+    pool.close()
+    pool.join()
 
-    data = calc_change(all_stocks, data)
-    # for x in all_stocks:
-    #     high = yf.Ticker(x).history(period="1mo")[['High']]
-    #     open = yf.Ticker(x).history(period="1mo")[['Open']]
-    #     change = (high - open.values) / open.values
-    #     data[x] = change
-    #     print(f'{len(all_stocks) - i} are left')
-    #     i+=1
-    # all_stocks = all_stocks.tolist()
+    results = pd.concat(results, axis=1)
 
+    return results
 
-        # daily_returns = (prices / prices.shift(1)) - 1
-        # daily_returns = daily_returns[1:]
-# change by 100 for pct
-
-
-    return data
 
 def gatherMulti(start_date, end_date, syms):
     data = yf.download(" ".join(syms), start=start_date, end=end_date)
@@ -138,3 +137,31 @@ def getPortolfio(tickers, shares):
     df = df.rename(index={f'{df.index.values[0]}': "current price"})
 
     return df
+
+
+def scrapeWSB():
+    res = requests.get('https://stocks.comment.ai/trending.html')
+    wsb_data = pd.DataFrame(columns=["mentions","sentiment"])
+    tickers = []
+
+    for line in res.text.splitlines():
+
+        m = re.findall(r'(?<=<td>)\d+(?=<\/td>)|(?<=<\/svg>\s)\d+(?=\s<br\/>)|(?<=center;">)\w+(?=<\/td>)',line)
+
+        if m:
+
+            total = int(m[0])
+            pos = int(m[1])
+            neutral = int(m[2])
+            neg = int(m[3])
+            ticker = m[4]
+
+            if total == (pos + neutral + neg):
+
+                # Append only if values add up.
+                # 0 = neg, 0.5 = neutral, 1 = positive
+                tickers.append(m[4])
+                normalized_sentiment = (0 * neg + 0.5 * neutral + 1 * pos) / total
+                wsb_data.loc[ticker] = [total,normalized_sentiment]
+
+    return wsb_data

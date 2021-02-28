@@ -3,7 +3,7 @@ import datetime as dt
 import argparse
 import numpy as np
 import sys
-
+import yfinance as yf
 
 def main():
     # Options stuff
@@ -23,7 +23,13 @@ def main():
     # plot_types = ['histogram', 'percent_returns']
     # stocks.plot(tickers, plot_types, stock_data)
 
-    test = stocks.gatherMemeStocks()
+    # data = stocks.gatherHotStocks()
+    # data.to_csv("data/hot_stocks.csv")
+
+    today = dt.date.today()
+    today = today.strftime("%m-%d-%Y")
+    sentiment = stocks.scrapeWSB()
+    sentiment.to_csv("data/wsb_sentiment_" + today + ".csv")
 
     # Sharpe ratio stuff
 
@@ -43,7 +49,6 @@ def main():
     # print(f"Start Date: {sd}")
     # print(f"End Date: {ed}")
     # print(f"Sharpe Ratio: {sr}")
-    # print(f"Volatility (stdev of daily returns): {sddr}")
     # print(f"Cumulative Return: {cr}")
     # # print(f"Average Daily Return: {adr}")
     # # print(f"Allocations: {vals}")
@@ -51,8 +56,7 @@ def main():
     # sharpe_tickers = list(desired.keys())
     # allocs = list(desired.values())
     # print(f"Optimal allocations: {desired}")
-    #
-    # owned_tickers = ['AAPL','MSFT','SQ','SHOP']
+    #WAMSFT','SQ','SHOP']
     # shares = [3.684302,5.773128,10.601169,1.052782]
     # holdings = stocks.getPortolfio(owned_tickers,shares)
     # total = holdings.iloc[1].sum()
