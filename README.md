@@ -1,4 +1,27 @@
-# TendiesMaker
-Gimme gimme chicken tendies, Be they crispy or from Wendy's.​ 
-Spend my hard-earned good-boy points, on Kid's Meal ball pit burger joints.
- Mummy Su lifts me to the car, to find me tendies near and far.
+# tendies-maker
+
+Make some sweet tendies
+
+## Installation
+
+Use the package manager [pip](https://pip.pypa.io/en/stable/) to install foobar.
+
+```bash
+pip install foobar
+```
+
+## Usage
+
+```python
+import foobar
+
+foobar.pluralize('word') # returns 'words'
+foobar.pluralize('goose') # returns 'geese'
+foobar.singularize('phenomena') # returns 'phenomenon'
+```
+
+## Contributing
+Pull as needed, branch the code if making any changes. Also try to keep track of tasks with issues.
+
+## License
+[MIT](https://choosealicense.com/licenses/mit/)
