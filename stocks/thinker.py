@@ -3,14 +3,13 @@ import numpy as np
 import scipy.optimize as spo
 import matplotlib.pyplot as plt
 import pandas as pd
+import yfinance as yf
+import os
+import re
 from matplotlib.dates import DateFormatter
-
-
-def scrape():
-    # TODO this can just scrape either yahoo, bloomberg, wsj, or marketwatch for top news on preferred companies.
-    # TODO look for dips. i.e. either 1 std or 0.5 std
-
-    pass
+import multiprocessing as mp
+from pathlib import Path
+from datetime import date
 
 
 def thinker(ticker, date, stock_data, options_data, scenario, *args):
@@ -142,9 +141,131 @@ def optimize(syms, data, start_val, gen_plot=False):
     return allocs, cr, adr, sddr, sr, vals
 
 
-def calcPortfolio(tickers, allocs, total, buy_amount):
+def calc_portfolio(tickers, allocs, total, buy_amount):
     new_total = total + buy_amount
     vals = np.array(allocs) * new_total
     vals = dict(zip(tickers, vals))
 
     return vals
+
+
+def calc_large_movers(tickers, data):
+    for x in tickers:
+        high = yf.Ticker(x).history(period="1mo")[['High']]
+        open = yf.Ticker(x).history(period="1mo")[['Open']]
+        change = (high - open.values) / open.values
+        if (change > 0.1).any()[0]:
+            data[x] = change
+        else:
+            pass
+    return data
+
+
+def calc_wsb_daily_change(dir):
+    data_dir = dir / 'data'
+    files = []
+    today = date.today().strftime("%m-%d-%Y")
+
+    for file in os.listdir(data_dir):
+
+        match = re.search(r'\d\d-\d\d-\d\d\d\d', file)
+
+        if match and any(x in file for x in ['wsb', 'sentiment']):
+            files.append(file)
+            # df = pd.read_csv(data_dir / file, index_col=0, dtype={"mentions": np.int32})
+
+    files = sorted(files, key=lambda x: datetime.datetime.strptime(
+        re.search(r'\d\d-\d\d-\d\d\d\d', x)[0], "%m-%d-%Y"), reverse=True)
+
+    df1 = pd.read_csv(data_dir / files[0], index_col=0, dtype={"mentions": np.int32})
+    df2 = pd.read_csv(data_dir / files[1], index_col=0, dtype={"mentions": np.int32})
+
+    df1.insert(0, column='rank', value=np.arange(1, len(df1) + 1))
+    df2['rank'] = np.arange(1, len(df2) + 1)
+
+    temp = df2['rank'] - df1['rank']
+    temp = temp.dropna()
+
+    df1['change'] = temp
+    df1 = df1.fillna(0)
+    df1 = df1.astype({'change': 'int32'})
+
+    if Path(data_dir / ("wsb_sentiment_" + today + ".csv")).is_file():
+        overwrite = input('Scrape already exists for today in /data dir.\nOverwrite (Y/N)? ')
+
+        if overwrite == 'Y' or overwrite == 'y':
+            df1.to_csv(data_dir / ('wsb_sentiment_' + today + '.csv'))
+        elif overwrite == 'N' or overwrite == 'n':
+            pass
+        else:
+            print('Invalid input.')
+
+    else:
+        df1.to_csv(data_dir / ('wsb_sentiment_' + today + '.csv'))
+
+    return None
+
+
+def find_hot_stocks(tickers=None):
+    if not tickers:
+        tickers1 = pd.read_csv('data/nasdaq_stocks.csv', sep=',')
+        tickers2 = pd.read_csv('data/nyse_stocks.csv', sep=',')
+        tickers = pd.concat([tickers1, tickers2])
+        tickers = tickers['Symbol']
+
+    # today = datetime.date.today()
+    num_proc = mp.cpu_count() - 1
+    tickers = tickers.to_numpy()
+    tickers_split = np.array_split(tickers, num_proc)
+
+    # Initialize empty df with correct row date indexes
+    data = yf.Ticker('AAPL').history(period='1mo')
+    data.drop(columns=['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock Splits'], inplace=True)
+    i = 1
+
+    cases = [(stocks, data) for stocks in tickers_split]
+    pool = mp.Pool(num_proc)
+    results = pool.starmap(calc_large_movers, cases)
+    pool.close()
+    pool.join()
+
+    results = pd.concat(results, axis=1)
+
+    return results
+
+
+def append_to_table(data_dir, short_interest, date_str):
+    today = date.today().strftime("%m-%d-%Y")
+
+    data_df = pd.read_csv(data_dir / ('wsb_sentiment_' + date_str + '.csv'), header=0, index_col=0)
+    data_df['short_interest'] = np.zeros(len(data_df))
+    tickers = data_df.index.values
+    shorted_filtered = short_interest[short_interest['Ticker'].isin(tickers)]
+
+    index = shorted_filtered.index.values
+    short_intst = shorted_filtered.ShortInt.values
+    short_intst = short_intst.astype('str')
+    short_intst = np.char.strip(short_intst, chars='%')
+    short_intst = short_intst.astype(np.float32)
+    short_intst = short_intst / 100
+    short_intst_tickers = shorted_filtered.Ticker.values
+
+    for i in range(len(index)):
+        if short_intst_tickers[i] in tickers:
+            data_df.loc[short_intst_tickers[i], 'short_interest'] = short_intst[i]
+
+    save_path = Path(data_dir / ("data_" + today + ".csv"))
+
+    if save_path.is_file():
+        overwrite = input('Data file already exists for today. Overwrite (Y/N)? ')
+
+        if overwrite == 'Y' or overwrite == 'y':
+            data_df.to_csv(save_path)
+        elif overwrite == 'N' or overwrite == 'n':
+            pass
+        else:
+            print('Invalid input.')
+    else:
+        data_df.to_csv(save_path)
+
+    return None

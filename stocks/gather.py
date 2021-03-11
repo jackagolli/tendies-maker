@@ -2,9 +2,13 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import datetime
-import multiprocessing as mp
 import requests
 import re
+import os
+import glob
+from datetime import date
+from pathlib import Path
+
 
 def gatherStockData(tickers, time_span, interval):
     data_dict = {}
@@ -74,47 +78,6 @@ def gatherOptionsData(ticker, days_from_today, type):
     return data_dict
 
 
-def calcLargeMovers(tickers, data):
-    for x in tickers:
-        high = yf.Ticker(x).history(period="1mo")[['High']]
-        open = yf.Ticker(x).history(period="1mo")[['Open']]
-        change = (high - open.values) / open.values
-        if (change > 0.1).any()[0]:
-            data[x] = change
-        else:
-            pass
-    return data
-
-
-# This function searches
-def gatherHotStocks(tickers=None):
-    if not tickers:
-        tickers1 = pd.read_csv('data/nasdaq_stocks.csv', sep=',')
-        tickers2 = pd.read_csv('data/nyse_stocks.csv', sep=',')
-        tickers = pd.concat([tickers1, tickers2])
-        tickers = tickers['Symbol']
-
-    # today = datetime.date.today()
-    num_proc = mp.cpu_count() - 1
-    tickers = tickers.to_numpy()
-    tickers_split = np.array_split(tickers, num_proc)
-
-    # Initialize empty df with correct row date indexes
-    data = yf.Ticker('AAPL').history(period="1mo")
-    data.drop(columns=['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock Splits'], inplace=True)
-    i = 1
-
-    cases = [(stocks, data) for stocks in tickers_split]
-    pool = mp.Pool(num_proc)
-    results = pool.starmap(calcLargeMovers, cases)
-    pool.close()
-    pool.join()
-
-    results = pd.concat(results, axis=1)
-
-    return results
-
-
 def gatherMulti(start_date, end_date, syms):
     data = yf.download(" ".join(syms), start=start_date, end=end_date)
     df = data['Close']
@@ -122,16 +85,17 @@ def gatherMulti(start_date, end_date, syms):
     return df
 
 
-def getPortolfio(tickers, shares):
+def get_portfolio(tickers, shares):
     """
     Get current portfolio given allocations
     """
+    n = len(tickers)
     data = yf.download(" ".join(tickers), period="1d", interval="1m")
     df = data['Close'].iloc[[-5]]
-    df = df.append(pd.DataFrame(np.array([shares[i] * df[val][0] for i, val in enumerate(tickers)]).reshape(1, 4),
+    df = df.append(pd.DataFrame(np.array([shares[i] * df[val][0] for i, val in enumerate(tickers)]).reshape(1, n),
                                 index=["values"], columns=tickers))
     total = df.sum(axis=1)[0]
-    df = df.append(pd.DataFrame(np.array([df[val][0] / total for i, val in enumerate(tickers)]).reshape(1, 4),
+    df = df.append(pd.DataFrame(np.array([df[val][0] / total for i, val in enumerate(tickers)]).reshape(1, n),
                                 index=["allocs"], columns=tickers))
 
     df = df.rename(index={f'{df.index.values[0]}': "current price"})
@@ -139,14 +103,15 @@ def getPortolfio(tickers, shares):
     return df
 
 
-def scrapeWSB():
+def scrape_wsb(data_dir):
     res = requests.get('https://stocks.comment.ai/trending.html')
-    wsb_data = pd.DataFrame(columns=["mentions","sentiment"])
+    wsb_data = pd.DataFrame(columns=["mentions", "sentiment"])
     tickers = []
+    today = date.today().strftime("%m-%d-%Y")
 
     for line in res.text.splitlines():
 
-        m = re.findall(r'(?<=<td>)\d+(?=<\/td>)|(?<=<\/svg>\s)\d+(?=\s<br\/>)|(?<=center;">)\w+(?=<\/td>)',line)
+        m = re.findall(r'(?<=<td>)\d+(?=<\/td>)|(?<=<\/svg>\s)\d+(?=\s<br\/>)|(?<=center;">)\w+(?=<\/td>)', line)
 
         if m:
 
@@ -157,11 +122,39 @@ def scrapeWSB():
             ticker = m[4]
 
             if total == (pos + neutral + neg):
-
                 # Append only if values add up.
                 # 0 = neg, 0.5 = neutral, 1 = positive
                 tickers.append(m[4])
                 normalized_sentiment = (0 * neg + 0.5 * neutral + 1 * pos) / total
-                wsb_data.loc[ticker] = [total,normalized_sentiment]
+                wsb_data.loc[ticker] = [total, normalized_sentiment]
 
-    return wsb_data
+    if Path(data_dir / ("wsb_sentiment_" + today + ".csv")).is_file():
+        overwrite = input('Scrape already generated for today. Overwrite (Y/N)? ')
+
+        if overwrite == 'Y' or overwrite == 'y':
+            wsb_data.to_csv("data/wsb_sentiment_" + today + ".csv")
+        elif overwrite == 'N' or overwrite == 'n':
+            pass
+        else:
+            print('Invalid input.')
+    else:
+        wsb_data.to_csv("data/wsb_sentiment_" + today + ".csv")
+
+    return None
+
+
+def gather_short_interest(data_dir):
+    scraped_tables = pd.read_html('https://www.highshortinterest.com/', header=0)
+    df = scraped_tables[2]
+    df = df[~df['Ticker'].str.contains("google_ad_client", na=False)]
+    df = df.dropna()
+    df = df.drop(columns=['Exchange'])
+
+    return df
+
+
+def gather_wsb_tickers(data_dir, date_str):
+    df = pd.read_csv(data_dir / ('wsb_sentiment_' + date_str + '.csv'), header=0)
+    tickers = df.iloc[:, 0].tolist()
+
+    return tickers

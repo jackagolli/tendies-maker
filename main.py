@@ -3,10 +3,17 @@ import datetime as dt
 import argparse
 import numpy as np
 import sys
+import os
 import yfinance as yf
+from pathlib import Path
+
 
 def main():
-    # Options stuff
+    data_dir = Path.cwd() / 'data'
+    """ Options
+    
+    Code below will contain all functions for calculating anything related to options for given tickers.
+    """
     #
     # tickers = ['AAPL', 'AMD', 'MSFT', 'SQ', 'AMAT']
     # ticker = tickers[0]
@@ -25,49 +32,67 @@ def main():
 
     # data = stocks.gatherHotStocks()
     # data.to_csv("data/hot_stocks.csv")
+    """ Sentiment analysis
 
-    today = dt.date.today()
-    today = today.strftime("%m-%d-%Y")
-    sentiment = stocks.scrapeWSB()
-    sentiment.to_csv("data/wsb_sentiment_" + today + ".csv")
+    Use the below functions for daily scrape of r/wallstreetbets and calculation of sentiment + change
+    """
 
-    # Sharpe ratio stuff
+    # stocks.scrape_wsb(data_dir)
+    # stocks.calc_wsb_daily_change(data_dir)
 
+    """ Short interest
+    
+    Calculate short interest for given ticker or given wsb sheet
+
+    """
+    desired_date = '03-11-2021'
+    short_interest = stocks.gather_short_interest(data_dir)
+    stocks.append_to_table(data_dir, short_interest, desired_date)
+
+    """ Sharpe ratio
+        
+    Use the below functions to feed a list of tickers and start date + end date to a basic optimizer 
+    that will maximize the Sharpe ratio for a portfolio of those tickers given the timeframe.
+    """
     # tickers = ['VOO','AAPL', 'AMD', 'MSFT', 'DIS','SWKS','AMAT','SQ','TEAM','AMZN','NVDA',
-    #            'INTC','GOOGL','SPCE','CRM','MU','SHOP','NFLX','TSLA']
-    #
-    # sd = dt.datetime(2020, 10, 1)
-    # ed = dt.datetime(2021, 1, 19)
-    # start_val = 1000
-    #
+    #            'INTC','GOOGL','SPCE','CRM','MU','SHOP','NFLX','TSLA','NIO','PLTR','WKHS','ARKK']
+
+    # sd = dt.datetime(2020, 9, 1)
+    # ed = dt.datetime(2021, 2, 26)
+    # start_val = 2000
+
     # df = stocks.gatherMulti(start_date=sd, end_date=ed, syms=tickers)
     # tickers = list(df)
     # allocations, cr, adr, sddr, sr, vals = stocks.optimize(tickers,data=df, start_val=start_val, gen_plot=True)
-    #
-    # # Print statistics
-    # # print(f"Start Amount: {start_val}")
+
+    # Print statistics
+    # print(f"Start Amount: {start_val}")
     # print(f"Start Date: {sd}")
     # print(f"End Date: {ed}")
     # print(f"Sharpe Ratio: {sr}")
     # print(f"Cumulative Return: {cr}")
-    # # print(f"Average Daily Return: {adr}")
-    # # print(f"Allocations: {vals}")
+    # print(f"Average Daily Return: {adr}")
+    # print(f"Allocations: {vals}")
+
     # desired = {tickers[i]:allocations[i] for i in range(len(allocations)) if allocations[i] > 0.001}
     # sharpe_tickers = list(desired.keys())
     # allocs = list(desired.values())
     # print(f"Optimal allocations: {desired}")
-    #WAMSFT','SQ','SHOP']
-    # shares = [3.684302,5.773128,10.601169,1.052782]
-    # holdings = stocks.getPortolfio(owned_tickers,shares)
+    # owned_tickers = ['MSFT','SQ','AAPL']
+    # shares = [5.802718,10.601169,14.78506]
+    # holdings = stocks.get_portfolio(owned_tickers,shares)
     # total = holdings.iloc[1].sum()
-    # new_tickers = ['AAPL','MSFT','SQ','SHOP']
-    # new_allocs = [0.30,0.20,0.30,0.20]
+    # new_tickers = ['MSFT','SQ','AAPL','NIO']
+    # new_allocs = [0.20,0.30,0.25,0.25]
     # buy_amount = 0
-    # buys = stocks.calcPortfolio(new_tickers,new_allocs,total,buy_amount)
+    # buys = stocks.calc_portfolio(new_tickers,new_allocs,total,buy_amount)
     # print(buys,sum(buys.values()))
 
-    # Arguments stuff
-
+    # TODO
+    """ Argparse code
+    
+    Once finished this will enable use of main.py via command line arguments
+    """
     # parser = argparse.ArgumentParser(prog='tendies maker')
     # parser.add_argument('integers', metavar='N', type=int, nargs='+',
     #                     help='an integer for the accumulator')
