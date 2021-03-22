@@ -4,13 +4,22 @@ import numpy as np
 import datetime
 import requests
 import re
-import os
-import glob
+import multiprocessing as mp
 from datetime import date
 from pathlib import Path
 
+num_proc = mp.cpu_count() - 1
 
-def gatherStockData(tickers, time_span, interval):
+
+def gather_stock_data(tickers, time_span, interval):
+    """
+    This will be deprecated
+
+    :param tickers:
+    :param time_span:
+    :param interval:
+    :return:
+    """
     data_dict = {}
 
     for ticker in tickers:
@@ -52,11 +61,13 @@ def gatherStockData(tickers, time_span, interval):
     return data_dict
 
 
-def gatherOptionsData(ticker, days_from_today, type):
+def gather_options_ticker(ticker, days_from_today, type):
     """ data stored in yfinance.options:
     ['contractSymbol', 'lastTradeDate', 'strike', 'lastPrice', 'bid', 'ask', 'change', 'percentChange', 'volume',
     'openInterest', 'impliedVolatility', 'inTheMoney', 'contractSize', 'currency']
     type = calls or puts
+
+    This will be deprecated
     """
     data_dict = {}
     today = datetime.date.today()
@@ -78,16 +89,97 @@ def gatherOptionsData(ticker, days_from_today, type):
     return data_dict
 
 
-def gatherMulti(start_date, end_date, syms):
-    data = yf.download(" ".join(syms), start=start_date, end=end_date)
-    df = data['Close']
+def gather_multi(syms, **kwargs):
+    """
+    Gather stock data for multiple tickers
+
+    :param syms: String of symbols with whitespace between each
+    :param kwargs: Eather provide a start_date and end_date datetime object, or pass a str to period
+    :return: dataframe of price history for given time period
+    """
+    start_date = kwargs.get('start_date', None)
+    end_date = kwargs.get('end_date', None)
+    period = kwargs.get('period', None)
+
+    if start_date and end_date:
+        df = yf.download(" ".join(syms), start=start_date, end=end_date)
+    else:
+        df = yf.download(" ".join(syms), period=period)
+
+    df = df.filter(like='Adj Close',axis=1)
+    return df
+
+
+def gather_single_prices(ticker, period="1mo"):
+    ticker = yf.Ticker(ticker)
+    data = ticker.history(period=period)
+
+    return data
+
+
+def get_call_put_ratio(tickers):
+    df = pd.DataFrame(index=tickers, columns=['put_call_ratio'])
+
+    for ticker in tickers:
+        total_put_vol = 0
+        total_call_vol = 0
+        single = yf.Ticker(ticker)
+
+        try:
+            dates = single.options
+            for date in dates:
+                options = single.option_chain(date)
+                calls = options[0]
+                puts = options[1]
+                total_call_vol += calls['volume'].sum()
+                total_put_vol += puts['volume'].sum()
+
+            df.loc[ticker, 'put_call_ratio'] = total_put_vol / total_call_vol
+
+        except:
+
+            df.loc[ticker, 'put_call_ratio'] = 0
+
+            continue
+
+    return df
+
+
+def get_put_call_magnitude(tickers):
+    df = pd.DataFrame(index=tickers, columns=['put_call_value_ratio'])
+
+    for ticker in tickers:
+        total_put_val = 0
+        total_call_val = 0
+        single = yf.Ticker(ticker)
+
+        try:
+            dates = single.options
+            for date in dates:
+                options = single.option_chain(date)
+                calls = options[0].fillna(0)
+                puts = options[1].fillna(0)
+                total_call_val += np.sum((calls['volume'].values * calls['lastPrice'].values))
+                total_put_val += np.sum((puts['volume'].values * puts['lastPrice'].values))
+
+            df.loc[ticker, 'put_call_value_ratio'] = total_put_val / total_call_val
+
+        except:
+
+            df.loc[ticker, 'put_call_value_ratio'] = 0
+
+            continue
 
     return df
 
 
 def get_portfolio(tickers, shares):
     """
-    Get current portfolio given allocations
+    Get current portfolio given num of shares and tickers
+
+    :param list tickers: stock tickers, list of str
+    :param list shares: num of shares, list of float
+    :return: dataframe of current portfolio holdings
     """
     n = len(tickers)
     data = yf.download(" ".join(tickers), period="1d", interval="1m")
@@ -148,7 +240,19 @@ def gather_short_interest(data_dir):
     df = scraped_tables[2]
     df = df[~df['Ticker'].str.contains("google_ad_client", na=False)]
     df = df.dropna()
-    df = df.drop(columns=['Exchange'])
+    # df = df.drop(columns=['Exchange'])
+    df = df.set_index('Ticker')
+    df.index.name = None
+    df = df[['ShortInt']]
+    df.columns = ['short_interest']
+
+    short_interest = df.short_interest.values
+    short_interest = short_interest.astype('str')
+    short_interest = np.char.strip(short_interest, chars='%')
+    short_interest = short_interest.astype(np.float32)
+    short_interest = short_interest / 100
+
+    df['short_interest'] = short_interest
 
     return df
 

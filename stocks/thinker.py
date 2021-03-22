@@ -10,6 +10,9 @@ from matplotlib.dates import DateFormatter
 import multiprocessing as mp
 from pathlib import Path
 from datetime import date
+import datetime
+
+num_proc = mp.cpu_count() - 1
 
 
 def thinker(ticker, date, stock_data, options_data, scenario, *args):
@@ -149,20 +152,20 @@ def calc_portfolio(tickers, allocs, total, buy_amount):
     return vals
 
 
-def calc_large_movers(tickers, data):
+def calc_intraday_change(tickers, data):
     for x in tickers:
         high = yf.Ticker(x).history(period="1mo")[['High']]
         open = yf.Ticker(x).history(period="1mo")[['Open']]
         change = (high - open.values) / open.values
-        if (change > 0.1).any()[0]:
-            data[x] = change
-        else:
-            pass
+        data[x] = change
+        # if (change > 0.07).any()[0]:
+        #     data[x] = change
+        # else:
+        #     pass
     return data
 
 
-def calc_wsb_daily_change(dir):
-    data_dir = dir / 'data'
+def calc_wsb_daily_change(data_dir):
     files = []
     today = date.today().strftime("%m-%d-%Y")
 
@@ -191,7 +194,7 @@ def calc_wsb_daily_change(dir):
     df1 = df1.astype({'change': 'int32'})
 
     if Path(data_dir / ("wsb_sentiment_" + today + ".csv")).is_file():
-        overwrite = input('Scrape already exists for today in /data dir.\nOverwrite (Y/N)? ')
+        overwrite = input('Scrape already exists for today in /data dir. Overwrite (Y/N)? ')
 
         if overwrite == 'Y' or overwrite == 'y':
             df1.to_csv(data_dir / ('wsb_sentiment_' + today + '.csv'))
@@ -206,26 +209,31 @@ def calc_wsb_daily_change(dir):
     return None
 
 
-def find_hot_stocks(tickers=None):
+def find_intraday_change(tickers=None):
     if not tickers:
-        tickers1 = pd.read_csv('data/nasdaq_stocks.csv', sep=',')
+        tickers1 = pd.read_csv('data/nasdaq_stocks_filtered.csv', sep=',')
         tickers2 = pd.read_csv('data/nyse_stocks.csv', sep=',')
         tickers = pd.concat([tickers1, tickers2])
         tickers = tickers['Symbol']
 
     # today = datetime.date.today()
-    num_proc = mp.cpu_count() - 1
-    tickers = tickers.to_numpy()
+
+    try:
+        dtype = tickers.dtype
+        tickers = tickers.to_numpy()
+
+    except:
+        tickers = np.asarray(tickers, dtype='object')
+
     tickers_split = np.array_split(tickers, num_proc)
 
     # Initialize empty df with correct row date indexes
     data = yf.Ticker('AAPL').history(period='1mo')
     data.drop(columns=['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock Splits'], inplace=True)
-    i = 1
 
     cases = [(stocks, data) for stocks in tickers_split]
     pool = mp.Pool(num_proc)
-    results = pool.starmap(calc_large_movers, cases)
+    results = pool.starmap(calc_intraday_change, cases)
     pool.close()
     pool.join()
 
@@ -234,25 +242,65 @@ def find_hot_stocks(tickers=None):
     return results
 
 
-def append_to_table(data_dir, short_interest, date_str):
+def days_since_max_spike(intraday_change, tickers):
+    today = np.datetime64(date.today())
+    df = pd.DataFrame(intraday_change.idxmax(axis=0), index=tickers, columns=['days_since_max_rise'])
+    df['days_since_max_rise'] = today - df['days_since_max_rise']
+    df['days_since_max_rise'] = df['days_since_max_rise'].dt.days.astype('int32')
+
+    return df
+
+
+def days_since_last_spike(intraday_change, tickers):
+    today = np.datetime64(date.today())
+    intraday_change[intraday_change < 0.07] = 0
+
+    df = pd.DataFrame(index=tickers, columns=['days_since_last_rise'])
+
+    for ticker in tickers:
+        for item in np.flip(intraday_change[ticker].values):
+            if item != 0:
+                last_date = intraday_change[ticker][intraday_change[ticker] == item].index[0]
+                delta = today - last_date
+                delta = int(delta.days)
+                df.loc[ticker, 'days_since_last_rise'] = delta
+                break
+
+    df = df.fillna(0)
+
+    return df
+
+
+def append_to_table(data_dir, data, date_str):
+    """
+    Append a formatted df to the main data table.
+
+    :param data_dir: Path() object leading to data subdirectory
+    :param data: The actual dataframe
+    :param date_str: A %m-%d-%Y formatted str date for saving the new file
+    :return: none, saves .csv file
+    """
     today = date.today().strftime("%m-%d-%Y")
 
-    data_df = pd.read_csv(data_dir / ('wsb_sentiment_' + date_str + '.csv'), header=0, index_col=0)
-    data_df['short_interest'] = np.zeros(len(data_df))
+    label = data.columns.values[0]
+    save_path = Path(data_dir / ("data_" + today + ".csv"))
+
+    try:
+        data_df = pd.read_csv(save_path, header=0, index_col=0)
+
+    except:
+        data_df = pd.read_csv(data_dir / ('wsb_sentiment_' + date_str + '.csv'), header=0, index_col=0)
+
+    data_df[label] = np.zeros(len(data_df))
+
     tickers = data_df.index.values
-    shorted_filtered = short_interest[short_interest['Ticker'].isin(tickers)]
+    data_filtered = data[data.index.isin(tickers)]
+    data_tickers = data_filtered.index.values
+    data_filtered = data_filtered[label].values
 
-    index = shorted_filtered.index.values
-    short_intst = shorted_filtered.ShortInt.values
-    short_intst = short_intst.astype('str')
-    short_intst = np.char.strip(short_intst, chars='%')
-    short_intst = short_intst.astype(np.float32)
-    short_intst = short_intst / 100
-    short_intst_tickers = shorted_filtered.Ticker.values
-
-    for i in range(len(index)):
-        if short_intst_tickers[i] in tickers:
-            data_df.loc[short_intst_tickers[i], 'short_interest'] = short_intst[i]
+    for i in range(len(data_tickers)):
+        if data_tickers[i] in tickers:
+            data_df.loc[data_tickers[i], label] = data_filtered[i]
 
     save_path = Path(data_dir / ("data_" + today + ".csv"))
 
@@ -260,6 +308,7 @@ def append_to_table(data_dir, short_interest, date_str):
         overwrite = input('Data file already exists for today. Overwrite (Y/N)? ')
 
         if overwrite == 'Y' or overwrite == 'y':
+
             data_df.to_csv(save_path)
         elif overwrite == 'N' or overwrite == 'n':
             pass
@@ -269,3 +318,90 @@ def append_to_table(data_dir, short_interest, date_str):
         data_df.to_csv(save_path)
 
     return None
+
+
+def format_data(data,tickers,name):
+    df = pd.DataFrame(index=tickers, columns=[name])
+    for ticker in tickers:
+        for item in np.flip(data[('Adj Close', ticker)].values):
+            if item != 0:
+                df.loc[ticker, name] = item
+                break
+
+    return df
+
+def calc_RSI(tickers, prices, window):
+    delta = prices.diff()
+    up = delta[delta > 0]
+    up = up.fillna(0)
+    down = delta[delta < 0].abs()
+    down = down.fillna(0)
+
+    avg_up = up.rolling(window).mean()
+    avg_down = down.rolling(window).mean()
+
+    RS = avg_up / avg_down
+
+    RSI = 100 - (100 / (1 + RS))
+
+    RSI = RSI.fillna(0)
+
+    return RSI
+
+
+def calc_SMA(prices, window):
+    """Return rolling mean of given values, using specified window size."""
+    return prices.rolling(window).mean()
+
+
+def calc_rolling_std(prices, window):
+    """Return rolling standard deviation of given values, using specified window size."""
+    return prices.rolling(window).std()
+
+
+def calc_bollinger_bands(rm, rstd):
+    """Return upper and lower Bollinger Bands."""
+    upper_band = rm + rstd * 2
+    lower_band = rm - rstd * 2
+    return upper_band, lower_band
+
+
+def get_BB(values, upper_band, lower_band):
+    BB = (values - lower_band) / (upper_band - lower_band)
+    return BB
+
+
+def get_MACD(prices):
+    # Get EMA using pandas
+    ema_12 = prices.ewm(span=12).mean()
+    ema_26 = prices.ewm(span=26).mean()
+    MACD_line = ema_12 - ema_26
+    signal_line = MACD_line.ewm(span=9).mean()
+    MACD_hist = MACD_line - signal_line
+
+    return MACD_hist
+
+def get_ichimoku(prices):
+
+    high_kenkan = prices.rolling(9).max()
+    low_kenkan = prices.rolling(9).min()
+    high_kijun = prices.rolling(26).max()
+    low_kijun = prices.rolling(26).min()
+    high_senkou_B = prices.rolling(52).max()
+    low_senkou_B = prices.rolling(52).min()
+
+    conversion_line = (high_kenkan + low_kenkan) / 2
+    base_line  = (high_kijun + low_kijun) / 2
+
+    leading_span_A = (conversion_line + base_line) / 2
+    leading_span_B = (high_senkou_B + low_senkou_B) / 2
+
+    diff = leading_span_A - leading_span_B
+
+    return diff
+
+
+def normalize(df):
+    df = (df - df.mean()) / df.std()
+
+    return df
