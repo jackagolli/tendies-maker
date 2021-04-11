@@ -11,6 +11,7 @@ import multiprocessing as mp
 from pathlib import Path
 from datetime import date
 import datetime
+from sklearn.preprocessing import MinMaxScaler
 
 num_proc = mp.cpu_count() - 1
 
@@ -180,8 +181,6 @@ def calc_wsb_daily_change(data_dir):
     files = sorted(files, key=lambda x: datetime.datetime.strptime(
         re.search(r'\d\d-\d\d-\d\d\d\d', x)[0], "%m-%d-%Y"), reverse=True)
 
-
-
     try:
         df1 = pd.read_csv(data_dir / files[0], index_col=0, dtype={"mentions": np.int32})
         df2 = pd.read_csv(data_dir / files[1], index_col=0, dtype={"mentions": np.int32})
@@ -275,7 +274,6 @@ def days_since_last_spike(intraday_change, tickers):
                 except:
                     continue
 
-
     df = df.fillna(0)
 
     return df
@@ -330,7 +328,7 @@ def append_to_table(data_dir, data, date_str, name=""):
     return None
 
 
-def format_data(data,tickers,name):
+def format_data(data, tickers, name):
     df = pd.DataFrame(index=tickers, columns=[name])
     for ticker in tickers:
         for item in np.flip(data[('Adj Close', ticker)].values):
@@ -339,6 +337,7 @@ def format_data(data,tickers,name):
                 break
 
     return df
+
 
 def calc_RSI(tickers, prices, window):
     delta = prices.diff()
@@ -391,8 +390,8 @@ def get_MACD(prices):
 
     return MACD_hist
 
-def get_ichimoku(prices):
 
+def get_ichimoku(prices):
     high_kenkan = prices.rolling(9).max()
     low_kenkan = prices.rolling(9).min()
     high_kijun = prices.rolling(26).max()
@@ -401,7 +400,7 @@ def get_ichimoku(prices):
     low_senkou_B = prices.rolling(52).min()
 
     conversion_line = (high_kenkan + low_kenkan) / 2
-    base_line  = (high_kijun + low_kijun) / 2
+    base_line = (high_kijun + low_kijun) / 2
 
     # Cloud formed by A - B. If A > B, cloud is green and bullish. If A < B, cloud is red and bearish.
     # So if ichimoku val is negative its bearish if positive it's bullish
@@ -413,7 +412,29 @@ def get_ichimoku(prices):
     return diff
 
 
-def normalize(df):
+def standard_score_normalize(df):
     df = (df - df.mean()) / df.std()
+    return df
+
+
+def min_max_normalize(df, ignored_columns=None):
+    initial_df = df
+    initial_index = df.index
+
+    try:
+        df = initial_df.drop(columns=ignored_columns)
+
+    except:
+        print("One or more of the specified columns don't exist.")
+
+    diff = initial_df.columns.difference(df.columns)
+    dropped_cols = initial_df[diff]
+
+    new_cols = df.columns
+
+    scaler = MinMaxScaler()
+    df = pd.DataFrame(scaler.fit_transform(df), index=initial_index, columns=new_cols)
+
+    df = pd.concat([df, dropped_cols], axis=1)
 
     return df

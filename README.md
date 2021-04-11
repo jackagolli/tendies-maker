@@ -29,6 +29,32 @@ Sample command to generate all data
 ```bash
 python generate_data.py -wsb -shorts -indicators -news -earnings -changes -options
 ```
+* **wsb** - Scrapes r/wallstreetbets via https://stocks.comment.ai/ to track mentions of 
+tickers and sentiment.
+* **shorts** - Scrapes https://www.highshortinterest.com/ to find most shorted stocks
+* **indicators**  - technical indicator values for wsb tickers
+   * [MACD](https://www.investopedia.com/terms/m/macd.asp)
+   * [Ichimoku clouds](https://www.investopedia.com/terms/i/ichimoku-cloud.asp#:~:text=The%20Ichimoku%20Cloud%20is%20a,plotting%20them%20on%20the%20chart.)
+   * [RSI](https://www.investopedia.com/terms/r/rsi.asp)
+   * [%B](https://school.stockcharts.com/doku.php?id=technical_indicators:bollinger_band_perce) 
+* **news** - Scrapes news headlines from https://finviz.com/ and runs natural language sentiment analysis to generate score
+* **earnings** - Uses yfinance to get days until next earnings event
+* **changes** - pulls data on largest change in past month and how many days since then
+* **options** - pulls options data and calculates put-call ratio (volume) and then value ratio of puts to calls
+
+### Preprocessing
+#### Results
+Getting results after market close, will essentially return a 0 or 1 if stock was a buy that day.
+```python
+python prepare_data.py -results
+```
+####Normalization
+Two options available
+- [min_max](https://en.wikipedia.org/wiki/Feature_scaling)
+- [standard](https://en.wikipedia.org/wiki/Standard_score)
+```python
+python prepare_data.py -normalize min_max
+```
 ## Contributing
 Pull as needed, branch the code if making any changes. Also try to keep track of tasks with issues.
 
