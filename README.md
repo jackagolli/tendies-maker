@@ -48,7 +48,7 @@ Getting results after market close, will essentially return a 0 or 1 if stock wa
 ```python
 python prepare_data.py -results
 ```
-####Normalization
+#### Normalization
 Two options available
 - [min_max](https://en.wikipedia.org/wiki/Feature_scaling)
 - [standard](https://en.wikipedia.org/wiki/Standard_score)
