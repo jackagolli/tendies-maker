@@ -183,28 +183,32 @@ def calc_wsb_daily_change(data_dir):
     df1 = pd.read_csv(data_dir / files[0], index_col=0, dtype={"mentions": np.int32})
     df2 = pd.read_csv(data_dir / files[1], index_col=0, dtype={"mentions": np.int32})
 
-    df1.insert(0, column='rank', value=np.arange(1, len(df1) + 1))
-    df2['rank'] = np.arange(1, len(df2) + 1)
+    try:
+        df1.insert(0, column='rank', value=np.arange(1, len(df1) + 1))
+        df2['rank'] = np.arange(1, len(df2) + 1)
 
-    temp = df2['rank'] - df1['rank']
-    temp = temp.dropna()
+        temp = df2['rank'] - df1['rank']
+        temp = temp.dropna()
 
-    df1['change'] = temp
-    df1 = df1.fillna(0)
-    df1 = df1.astype({'change': 'int32'})
+        df1['change'] = temp
+        df1 = df1.fillna(0)
+        df1 = df1.astype({'change': 'int32'})
 
-    if Path(data_dir / ("wsb_sentiment_" + today + ".csv")).is_file():
-        overwrite = input('Scrape already exists for today in /data dir. Overwrite (Y/N)? ')
+        if Path(data_dir / ("wsb_sentiment_" + today + ".csv")).is_file():
+            overwrite = input('Scrape already exists for today in /data dir. Overwrite (Y/N)? ')
 
-        if overwrite == 'Y' or overwrite == 'y':
-            df1.to_csv(data_dir / ('wsb_sentiment_' + today + '.csv'))
-        elif overwrite == 'N' or overwrite == 'n':
-            pass
+            if overwrite == 'Y' or overwrite == 'y':
+                df1.to_csv(data_dir / ('wsb_sentiment_' + today + '.csv'))
+            elif overwrite == 'N' or overwrite == 'n':
+                pass
+            else:
+                print('Invalid input.')
+
         else:
-            print('Invalid input.')
+            df1.to_csv(data_dir / ('wsb_sentiment_' + today + '.csv'))
 
-    else:
-        df1.to_csv(data_dir / ('wsb_sentiment_' + today + '.csv'))
+    except:
+        pass
 
     return None
 
@@ -260,18 +264,22 @@ def days_since_last_spike(intraday_change, tickers):
     for ticker in tickers:
         for item in np.flip(intraday_change[ticker].values):
             if item != 0:
-                last_date = intraday_change[ticker][intraday_change[ticker] == item].index[0]
-                delta = today - last_date
-                delta = int(delta.days)
-                df.loc[ticker, 'days_since_last_rise'] = delta
-                break
+                try:
+                    last_date = intraday_change[ticker][intraday_change[ticker] == item].index[0]
+                    delta = today - last_date
+                    delta = int(delta.days)
+                    df.loc[ticker, 'days_since_last_rise'] = delta
+                    break
+                except:
+                    continue
+
 
     df = df.fillna(0)
 
     return df
 
 
-def append_to_table(data_dir, data, date_str):
+def append_to_table(data_dir, data, date_str, name=""):
     """
     Append a formatted df to the main data table.
 
@@ -305,7 +313,7 @@ def append_to_table(data_dir, data, date_str):
     save_path = Path(data_dir / ("data_" + today + ".csv"))
 
     if save_path.is_file():
-        overwrite = input('Data file already exists for today. Overwrite (Y/N)? ')
+        overwrite = input(f'Data file already exists for today. Overwrite with {name} data? (Y/N) ')
 
         if overwrite == 'Y' or overwrite == 'y':
 
@@ -393,6 +401,8 @@ def get_ichimoku(prices):
     conversion_line = (high_kenkan + low_kenkan) / 2
     base_line  = (high_kijun + low_kijun) / 2
 
+    # Cloud formed by A - B. If A > B, cloud is green and bullish. If A < B, cloud is red and bearish.
+    # So if ichimoku val is negative its bearish if positive it's bullish
     leading_span_A = (conversion_line + base_line) / 2
     leading_span_B = (high_senkou_B + low_senkou_B) / 2
 

@@ -7,9 +7,12 @@ import re
 import multiprocessing as mp
 from datetime import date
 from pathlib import Path
+from urllib.request import urlopen, Request
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+import nltk
+from bs4 import BeautifulSoup
 
 num_proc = mp.cpu_count() - 1
-
 
 def gather_stock_data(tickers, time_span, interval):
     """
@@ -100,15 +103,38 @@ def gather_multi(syms, **kwargs):
     start_date = kwargs.get('start_date', None)
     end_date = kwargs.get('end_date', None)
     period = kwargs.get('period', None)
+    key = kwargs.get('key', 'Adj Close')
 
     if start_date and end_date:
         df = yf.download(" ".join(syms), start=start_date, end=end_date)
     else:
         df = yf.download(" ".join(syms), period=period)
 
-    df = df.filter(like='Adj Close',axis=1)
+    if key == 'all':
+        pass
+    else:
+        df = df.filter(like=key,axis=1)
+
     return df
 
+def gather_DTE(tickers):
+    today = np.datetime64(date.today())
+    df = pd.DataFrame(index=tickers, columns=['DTE'])
+    for ticker in tickers:
+        yf_ticker = yf.Ticker(ticker)
+        calendar = yf_ticker.calendar
+        try:
+            next_date = calendar.loc["Earnings Date"][0]
+            delta = next_date - today
+            delta = int(delta.days)
+        except:
+
+            delta = 0
+
+        df.loc[ticker, 'DTE'] = delta
+        print()
+
+    return df
 
 def gather_single_prices(ticker, period="1mo"):
     ticker = yf.Ticker(ticker)
@@ -262,3 +288,65 @@ def gather_wsb_tickers(data_dir, date_str):
     tickers = df.iloc[:, 0].tolist()
 
     return tickers
+
+def gather_results(prices,tickers):
+    today = np.datetime64(date.today())
+
+    change = pd.DataFrame(index=tickers, columns=['Y'])
+
+    for x in tickers:
+
+        high = prices[('High',x)]
+        open = prices[('Open',x)]
+        delta = (high.values - open.values) / open.values
+        change.loc[x,'Y'] = delta[0]
+
+
+    change[change < 0.07] = 0
+
+    change[change != 0] = 1
+
+
+    return change
+
+
+def scrape_news_sentiment(tickers=None):
+
+    # tickers = ['GME','AMC']
+    nltk.download('vader_lexicon')
+    df = pd.DataFrame(index=tickers, columns=['news_sentiment'])
+    base_url = 'https://finviz.com/quote.ashx?t='
+    news_tables = {}
+
+    for ticker in tickers:
+        url = base_url + ticker
+        req = Request(url=url, headers={"User-Agent": "Chrome"})
+        response = urlopen(req)
+        html = BeautifulSoup(response, "html.parser")
+        news_table = html.find(id='news-table')
+        news_tables[ticker] = news_table
+
+    news_headlines = {}
+
+    for ticker, news_table in news_tables.items():
+        news_headlines[ticker] = []
+        for i in news_table.findAll('tr'):
+
+            text = i.a.get_text()
+            news_headlines[ticker].append(text)
+
+    vader = SentimentIntensityAnalyzer()
+
+    for ticker,value in news_headlines.items():
+        # This is the avg score between -1 and 1 of the all the news headlines
+        news_df = pd.DataFrame(news_headlines[ticker],columns=['headline'])
+        scores = news_df['headline'].apply(vader.polarity_scores).tolist()
+        scores_df = pd.DataFrame(scores)
+        score = scores_df['compound'].mean()
+        df.loc[ticker, 'news_sentiment'] = score
+        # news_df = news_df.join(scores_df, rsuffix='_right')
+        # news_df['date'] = pd.to_datetime(news_df.date).dt.date
+
+
+    return df
+
