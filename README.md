@@ -1,6 +1,6 @@
 # tendies-maker
 
-Make some sweet tendies
+Make tendies
 
 ## Installation
 
