@@ -1,6 +1,6 @@
 # tendies-maker
 
-Make some sweet tendies
+Make tendies
 
 ## Installation
 
@@ -9,7 +9,7 @@ Use the package manager [pip](https://pip.pypa.io/en/stable/) to
 install, or any desired package manager.
 
 ```bash
-pip install requirements.txt
+pip install -r requirements.txt
 ```
 
 If using conda,
@@ -18,9 +18,9 @@ conda install --file requirements.txt
 ```
 
 ## Usage
-
+### Gathering data
 Run within virtual environment, conda environment, or using any Python installation with 
-required libraries. Get commands using -h
+required libraries. Get commands help using -h
 ```python
 python generate_data.py -h
 ```

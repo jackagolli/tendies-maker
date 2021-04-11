@@ -132,7 +132,6 @@ def gather_DTE(tickers):
             delta = 0
 
         df.loc[ticker, 'DTE'] = delta
-        print()
 
     return df
 

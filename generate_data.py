@@ -7,6 +7,10 @@ import numpy as np
 import pandas as pd
 import sys
 
+"""
+Gather relevant data for ML model. Try to run before market open, 8:15 am CST at the latest.
+"""
+
 # Set data directory here
 data_dir = Path.cwd() / 'data'
 if data_dir.exists():

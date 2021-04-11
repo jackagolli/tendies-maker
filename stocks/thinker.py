@@ -180,10 +180,11 @@ def calc_wsb_daily_change(data_dir):
     files = sorted(files, key=lambda x: datetime.datetime.strptime(
         re.search(r'\d\d-\d\d-\d\d\d\d', x)[0], "%m-%d-%Y"), reverse=True)
 
-    df1 = pd.read_csv(data_dir / files[0], index_col=0, dtype={"mentions": np.int32})
-    df2 = pd.read_csv(data_dir / files[1], index_col=0, dtype={"mentions": np.int32})
+
 
     try:
+        df1 = pd.read_csv(data_dir / files[0], index_col=0, dtype={"mentions": np.int32})
+        df2 = pd.read_csv(data_dir / files[1], index_col=0, dtype={"mentions": np.int32})
         df1.insert(0, column='rank', value=np.arange(1, len(df1) + 1))
         df2['rank'] = np.arange(1, len(df2) + 1)
 
@@ -195,7 +196,8 @@ def calc_wsb_daily_change(data_dir):
         df1 = df1.astype({'change': 'int32'})
 
         if Path(data_dir / ("wsb_sentiment_" + today + ".csv")).is_file():
-            overwrite = input('Scrape already exists for today in /data dir. Overwrite (Y/N)? ')
+            overwrite = input('WSB sentiment data already exists for today in /data dir. '
+                              'Overwrite with change since most recent file? (Y/N)? ')
 
             if overwrite == 'Y' or overwrite == 'y':
                 df1.to_csv(data_dir / ('wsb_sentiment_' + today + '.csv'))
