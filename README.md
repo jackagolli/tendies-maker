@@ -44,7 +44,7 @@ tickers and sentiment.
 
 ### Preprocessing
 #### Results
-Getting results after market close, will essentially return a 0 or 1 if stock was a buy that day.
+Getting results after market close, will essentially return a 0 or 1 if stock was a buy that day. Do this before normalizing data.
 ```python
 python prepare_data.py -results
 ```

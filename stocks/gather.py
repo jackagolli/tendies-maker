@@ -144,7 +144,7 @@ def gather_single_prices(ticker, period="1mo"):
 
 def get_call_put_ratio(tickers):
     df = pd.DataFrame(index=tickers, columns=['put_call_ratio'])
-
+    print("Calculating...")
     for ticker in tickers:
         total_put_vol = 0
         total_call_vol = 0
@@ -172,7 +172,7 @@ def get_call_put_ratio(tickers):
 
 def get_put_call_magnitude(tickers):
     df = pd.DataFrame(index=tickers, columns=['put_call_value_ratio'])
-
+    print("Calculating...")
     for ticker in tickers:
         total_put_val = 0
         total_call_val = 0
@@ -301,7 +301,7 @@ def gather_results(prices,tickers):
         change.loc[x,'Y'] = delta[0]
 
 
-    change[change < 0.07] = 0
+    change[change < 0.06] = 0
 
     change[change != 0] = 1
 

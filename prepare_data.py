@@ -60,7 +60,7 @@ if args.normalize:
                                                                                   'short_interest'])
             elif param == "standard":
 
-                normalized_data = stocks.standard_score_normalize(data)
+                normalized_data = stocks.standard_score_normalize(data, ignored_columns=['Y'])
 
             if Path(data_dir / ("normalized_data_" + date_str + ".csv")).is_file():
                 overwrite = input('Normalized data file already exists for today. Overwrite (Y/N)? ')

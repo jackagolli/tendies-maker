@@ -166,7 +166,7 @@ def calc_intraday_change(tickers, data):
     return data
 
 
-def calc_wsb_daily_change(data_dir):
+def calc_wsb_daily_change(data_dir,overwrite=False):
     files = []
     today = date.today().strftime("%m-%d-%Y")
 
@@ -194,7 +194,7 @@ def calc_wsb_daily_change(data_dir):
         df1 = df1.fillna(0)
         df1 = df1.astype({'change': 'int32'})
 
-        if Path(data_dir / ("wsb_sentiment_" + today + ".csv")).is_file():
+        if Path(data_dir / ("wsb_sentiment_" + today + ".csv")).is_file() or not overwrite:
             overwrite = input('WSB sentiment data already exists for today in /data dir. '
                               'Overwrite with change since most recent file? (Y/N)? ')
 
@@ -258,7 +258,7 @@ def days_since_max_spike(intraday_change, tickers):
 
 def days_since_last_spike(intraday_change, tickers):
     today = np.datetime64(date.today())
-    intraday_change[intraday_change < 0.07] = 0
+    intraday_change[intraday_change < 0.06] = 0
 
     df = pd.DataFrame(index=tickers, columns=['days_since_last_rise'])
 
@@ -279,13 +279,15 @@ def days_since_last_spike(intraday_change, tickers):
     return df
 
 
-def append_to_table(data_dir, data, date_str, name=""):
+def append_to_table(data_dir, data, date_str, name="", overwrite=False):
     """
     Append a formatted df to the main data table.
 
     :param data_dir: Path() object leading to data subdirectory
     :param data: The actual dataframe
     :param date_str: A %m-%d-%Y formatted str date for saving the new file
+    :param name: Name to show in print statement for data type
+    :param overwrite: Flag whether to skip manual input for overwriting files
     :return: none, saves .csv file
     """
     today = date.today().strftime("%m-%d-%Y")
@@ -312,7 +314,7 @@ def append_to_table(data_dir, data, date_str, name=""):
 
     save_path = Path(data_dir / ("data_" + today + ".csv"))
 
-    if save_path.is_file():
+    if save_path.is_file() or not overwrite:
         overwrite = input(f'Data file already exists for today. Overwrite with {name} data? (Y/N) ')
 
         if overwrite == 'Y' or overwrite == 'y':
@@ -412,8 +414,22 @@ def get_ichimoku(prices):
     return diff
 
 
-def standard_score_normalize(df):
+def standard_score_normalize(df, ignored_columns=None):
+    initial_df = df
+
+    try:
+        df = initial_df.drop(columns=ignored_columns)
+
+    except:
+        print("One or more of the specified columns don't exist.")
+
+    diff = initial_df.columns.difference(df.columns)
+    dropped_cols = initial_df[diff]
+
     df = (df - df.mean()) / df.std()
+
+    df = pd.concat([df, dropped_cols], axis=1)
+
     return df
 
 
@@ -429,6 +445,11 @@ def min_max_normalize(df, ignored_columns=None):
 
     diff = initial_df.columns.difference(df.columns)
     dropped_cols = initial_df[diff]
+    dropped_col_names = list(dropped_cols.columns.values)
+
+    if 'Y' in ignored_columns:
+        dropped_col_names.pop(dropped_col_names.index('Y'))
+        dropped_cols = dropped_cols[dropped_col_names + ['Y']]
 
     new_cols = df.columns
 
