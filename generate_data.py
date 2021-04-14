@@ -130,13 +130,15 @@ if __name__ == '__main__':
         print("Creating new Pool for parallelizing runs...")
         with pool:
             print("Pool created...")
+            print("Calculating put-call ratio data...")
             data = pool.map(stocks.get_call_put_ratio, tickers_split)
         data = pd.concat(data, axis=0)
         stocks.append_to_table(data_dir, data, today, name="call-put ratio",overwrite=bool)
-
+        pool = mp.Pool(num_proc)
         print("Creating new Pool for parallelizing runs...")
         with pool:
             print("Pool created...")
+            print("Calculating put-call value ratio data...")
             data = pool.map(stocks.get_put_call_magnitude, tickers_split)
         data = pd.concat(data, axis=0)
         stocks.append_to_table(data_dir, data, today, name="call-put value ratio",overwrite=bool)

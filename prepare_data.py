@@ -57,13 +57,13 @@ if args.normalize:
 
                 normalized_data = stocks.min_max_normalize(data, ignored_columns=['put_call_ratio', 'put_call_value_ratio',
                                                                                   'max_intraday_change_1mo', 'sentiment',
-                                                                                  'short_interest'])
+                                                                                  'short_interest','Y'])
             elif param == "standard":
 
                 normalized_data = stocks.standard_score_normalize(data, ignored_columns=['Y'])
 
             if Path(data_dir / ("normalized_data_" + date_str + ".csv")).is_file():
-                overwrite = input('Normalized data file already exists for today. Overwrite (Y/N)? ')
+                overwrite = input(f'Normalized data file for {date_str} already exists for today. Overwrite (Y/N)? ')
 
                 if overwrite == 'Y' or overwrite == 'y':
                     normalized_data.to_csv(data_dir / ("normalized_data_" + date_str + ".csv"))

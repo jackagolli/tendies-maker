@@ -122,8 +122,8 @@ def gather_DTE(tickers):
     df = pd.DataFrame(index=tickers, columns=['DTE'])
     for ticker in tickers:
         yf_ticker = yf.Ticker(ticker)
-        calendar = yf_ticker.calendar
         try:
+            calendar = yf_ticker.calendar
             next_date = calendar.loc["Earnings Date"][0]
             delta = next_date - today
             delta = int(delta.days)
@@ -144,7 +144,6 @@ def gather_single_prices(ticker, period="1mo"):
 
 def get_call_put_ratio(tickers):
     df = pd.DataFrame(index=tickers, columns=['put_call_ratio'])
-    print("Calculating...")
     for ticker in tickers:
         total_put_vol = 0
         total_call_vol = 0
@@ -172,7 +171,6 @@ def get_call_put_ratio(tickers):
 
 def get_put_call_magnitude(tickers):
     df = pd.DataFrame(index=tickers, columns=['put_call_value_ratio'])
-    print("Calculating...")
     for ticker in tickers:
         total_put_val = 0
         total_call_val = 0
@@ -319,20 +317,27 @@ def scrape_news_sentiment(tickers=None):
 
     for ticker in tickers:
         url = base_url + ticker
-        req = Request(url=url, headers={"User-Agent": "Chrome"})
-        response = urlopen(req)
-        html = BeautifulSoup(response, "html.parser")
-        news_table = html.find(id='news-table')
+        try:
+            req = Request(url=url, headers={"User-Agent": "Chrome"})
+            response = urlopen(req)
+            html = BeautifulSoup(response, "html.parser")
+            news_table = html.find(id='news-table')
+        except:
+            news_table = ''
         news_tables[ticker] = news_table
 
     news_headlines = {}
 
     for ticker, news_table in news_tables.items():
         news_headlines[ticker] = []
-        for i in news_table.findAll('tr'):
+        try:
+            for i in news_table.findAll('tr'):
 
-            text = i.a.get_text()
-            news_headlines[ticker].append(text)
+                text = i.a.get_text()
+                news_headlines[ticker].append(text)
+        except:
+            news_headlines[ticker].append('')
+
 
     vader = SentimentIntensityAnalyzer()
 

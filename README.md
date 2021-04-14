@@ -29,6 +29,10 @@ Sample command to generate all data
 ```bash
 python generate_data.py -wsb -shorts -indicators -news -earnings -changes -options
 ```
+Use overwrite argument to not be prompted during each edit to data file and overwrite all
+```bash
+-overwrite
+```
 * **wsb** - Scrapes r/wallstreetbets via https://stocks.comment.ai/ to track mentions of 
 tickers and sentiment.
 * **shorts** - Scrapes https://www.highshortinterest.com/ to find most shorted stocks

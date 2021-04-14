@@ -169,7 +169,7 @@ def calc_intraday_change(tickers, data):
 def calc_wsb_daily_change(data_dir,overwrite=False):
     files = []
     today = date.today().strftime("%m-%d-%Y")
-
+    print('Calculating change since previous file...')
     for file in os.listdir(data_dir):
 
         match = re.search(r'\d\d-\d\d-\d\d\d\d', file)
@@ -194,7 +194,7 @@ def calc_wsb_daily_change(data_dir,overwrite=False):
         df1 = df1.fillna(0)
         df1 = df1.astype({'change': 'int32'})
 
-        if Path(data_dir / ("wsb_sentiment_" + today + ".csv")).is_file() or not overwrite:
+        if Path(data_dir / ("wsb_sentiment_" + today + ".csv")).is_file() and not overwrite:
             overwrite = input('WSB sentiment data already exists for today in /data dir. '
                               'Overwrite with change since most recent file? (Y/N)? ')
 
@@ -209,7 +209,7 @@ def calc_wsb_daily_change(data_dir,overwrite=False):
             df1.to_csv(data_dir / ('wsb_sentiment_' + today + '.csv'))
 
     except:
-        pass
+        print('No scrapes found from previous days.')
 
     return None
 
@@ -314,7 +314,7 @@ def append_to_table(data_dir, data, date_str, name="", overwrite=False):
 
     save_path = Path(data_dir / ("data_" + today + ".csv"))
 
-    if save_path.is_file() or not overwrite:
+    if save_path.is_file() and not overwrite:
         overwrite = input(f'Data file already exists for today. Overwrite with {name} data? (Y/N) ')
 
         if overwrite == 'Y' or overwrite == 'y':
