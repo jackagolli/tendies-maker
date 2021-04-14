@@ -118,19 +118,18 @@ def gather_multi(syms, **kwargs):
     return df
 
 def gather_DTE(tickers):
-    today = np.datetime64(date.today())
+    today = date.today()
     df = pd.DataFrame(index=tickers, columns=['DTE'])
     for ticker in tickers:
         yf_ticker = yf.Ticker(ticker)
+
+        calendar = yf_ticker.calendar
         try:
-            calendar = yf_ticker.calendar
-            next_date = calendar.loc["Earnings Date"][0]
+            next_date = calendar.loc["Earnings Date"][0].to_pydatetime().date()
             delta = next_date - today
             delta = int(delta.days)
         except:
-
-            delta = 0
-
+            delta=0
         df.loc[ticker, 'DTE'] = delta
 
     return df
@@ -166,6 +165,7 @@ def get_call_put_ratio(tickers):
 
             continue
 
+    df = df.fillna(0)
     return df
 
 
@@ -193,6 +193,7 @@ def get_put_call_magnitude(tickers):
 
             continue
 
+    df = df.fillna(0)
     return df
 
 

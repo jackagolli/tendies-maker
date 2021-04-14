@@ -157,12 +157,18 @@ def calc_intraday_change(tickers, data):
     for x in tickers:
         high = yf.Ticker(x).history(period="1mo")[['High']]
         open = yf.Ticker(x).history(period="1mo")[['Open']]
-        change = (high - open.values) / open.values
+        try:
+            change = (high - open.values) / open.values
+        except:
+            change = 0
+
         data[x] = change
         # if (change > 0.07).any()[0]:
         #     data[x] = change
         # else:
         #     pass
+        data.replace([np.inf, -np.inf], np.nan, inplace=True)
+        data.fillna(0, inplace=True)
     return data
 
 
