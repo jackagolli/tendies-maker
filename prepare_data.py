@@ -83,9 +83,31 @@ if args.results:
     """
     Get results for the day. Run after market close.
     """
+    files = []
 
-    tickers = stocks.gather_wsb_tickers(data_dir, today)
-    prices = stocks.gather_multi(tickers,period="1d",key='all')
-    result = stocks.gather_results(prices,tickers)
-    stocks.append_to_table(data_dir,data=result,date_str=today)
+    for file in os.listdir(data_dir):
+
+        match = re.search(r'\d\d-\d\d-\d\d\d\d', file)
+
+        if match and not any(x in file for x in ['sentiment', 'normalized']):
+            files.append(file)
+            # df = pd.read_csv(data_dir / file, index_col=0, dtype={"mentions": np.int32})
+
+    files = sorted(files, key=lambda x: dt.datetime.strptime(
+        re.search(r'\d\d-\d\d-\d\d\d\d', x)[0], "%m-%d-%Y"), reverse=True)
+
+    for file in files:
+        path = data_dir / file
+        date_str = re.search(r'\d\d-\d\d-\d\d\d\d', file)[0]
+        date2 = dt.datetime.strptime(date_str,"%m-%d-%Y")
+        # Check if there was spike in past 5 days for target column
+        date1 = date2 - dt.timedelta(days=5)
+        sd = date1.strftime("%Y-%m-%d")
+        ed = date2.strftime("%Y-%m-%d")
+
+        data = pd.read_csv(path, index_col=0)
+        tickers = stocks.gather_wsb_tickers(data_dir, date_str)
+        prices = stocks.gather_multi(tickers, start_date=sd,end_date=ed,key='all')
+        result = stocks.gather_results(prices,tickers)
+        stocks.append_to_table(data_dir,data=result,date_str=today)
 

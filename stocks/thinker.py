@@ -2,6 +2,7 @@ import datetime
 import numpy as np
 import scipy.optimize as spo
 import matplotlib.pyplot as plt
+import plotly.graph_objs as go
 import pandas as pd
 import yfinance as yf
 import os
@@ -12,7 +13,7 @@ from pathlib import Path
 from datetime import date
 import datetime
 from sklearn.preprocessing import MinMaxScaler
-
+from io import StringIO
 num_proc = mp.cpu_count() - 1
 
 
@@ -131,16 +132,24 @@ def optimize(syms, data, start_val, gen_plot=False):
     vals = dict(zip(syms, vals))
 
     if gen_plot:
+        pd.options.plotting.backend = "plotly"
         port_norm = port_val.divide(port_val.iloc[0])
         port_norm = pd.DataFrame(port_norm, columns=['Portfolio'])
         df_temp = normed.join(port_norm)
-        ax = df_temp.plot()
-        ax.set_ylabel("Value")
-        date_form = DateFormatter("%b %Y")
-        ax.xaxis.set_major_formatter(date_form)
-        plt.legend(loc="upper left")
-        plt.grid()
-        plt.show()
+        # df_temp['date'] = df_temp.index
+        fig = go.Figure()
+        for col in df_temp.columns:
+            fig.add_trace(go.Scatter(x=df_temp.index, y=df_temp[col], name=col))
+        fig.show()
+
+        # matplotlib stuff
+        # ax = df_temp.plot()
+        # ax.set_ylabel("Value")
+        # date_form = DateFormatter("%b %Y")
+        # ax.xaxis.set_major_formatter(date_form)
+        # plt.legend(loc="upper left")
+        # plt.grid()
+        # plt.show()
 
     return allocs, cr, adr, sddr, sr, vals
 
@@ -296,6 +305,7 @@ def append_to_table(data_dir, data, date_str, name="", overwrite=False):
     :param overwrite: Flag whether to skip manual input for overwriting files
     :return: none, saves .csv file
     """
+    data = data.fillna(0)
     today = date.today().strftime("%m-%d-%Y")
 
     label = data.columns.values[0]

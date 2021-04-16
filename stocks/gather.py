@@ -122,9 +122,8 @@ def gather_DTE(tickers):
     df = pd.DataFrame(index=tickers, columns=['DTE'])
     for ticker in tickers:
         yf_ticker = yf.Ticker(ticker)
-
-        calendar = yf_ticker.calendar
         try:
+            calendar = yf_ticker.calendar
             next_date = calendar.loc["Earnings Date"][0].to_pydatetime().date()
             delta = next_date - today
             delta = int(delta.days)
@@ -282,22 +281,28 @@ def gather_short_interest(data_dir):
 
 
 def gather_wsb_tickers(data_dir, date_str):
-    df = pd.read_csv(data_dir / ('wsb_sentiment_' + date_str + '.csv'), header=0)
+    try:
+        df = pd.read_csv(data_dir / ('wsb_sentiment_' + date_str + '.csv'), header=0)
+    except:
+        df = pd.read_csv(data_dir / ('data_' + date_str + '.csv'), header=0)
     tickers = df.iloc[:, 0].tolist()
 
     return tickers
 
 def gather_results(prices,tickers):
-    today = np.datetime64(date.today())
 
     change = pd.DataFrame(index=tickers, columns=['Y'])
 
     for x in tickers:
+        changes = []
+        for index, row in prices.iterrows():
 
-        high = prices[('High',x)]
-        open = prices[('Open',x)]
-        delta = (high.values - open.values) / open.values
-        change.loc[x,'Y'] = delta[0]
+            high = prices.High.loc[index,x]
+            open = prices.Open.loc[index,x]
+            delta = (high - open) / open
+            changes.append(delta)
+
+        change.loc[x,'Y'] = max(changes)
 
 
     change[change < 0.06] = 0
@@ -331,11 +336,22 @@ def scrape_news_sentiment(tickers=None):
 
     for ticker, news_table in news_tables.items():
         news_headlines[ticker] = []
+        dates = []
         try:
-            for i in news_table.findAll('tr'):
 
+            for i in news_table.findAll('tr'):
+                # Strictly get more recent sentiment
+                if len(dates) == 4:
+                    break
                 text = i.a.get_text()
+                date_scrape = i.td.text.split()
+
+                if len(date_scrape) != 1:
+                    date = date_scrape[0]
+                    dates.append(date)
+
                 news_headlines[ticker].append(text)
+
         except:
             news_headlines[ticker].append('')
 

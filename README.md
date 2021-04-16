@@ -59,6 +59,10 @@ Two options available
 ```python
 python prepare_data.py -normalize min_max
 ```
+
+### portfolio.py
+This has code inside to optimize for maximum Sharpe Ratio given a list of tickers. Also has some commented
+code useful for getting options chain for tickers. This file is less user friendly and cannot be run with arguments
 ## Contributing
 Pull as needed, branch the code if making any changes. Also try to keep track of tasks with issues.
 
