@@ -97,14 +97,14 @@ for file in files:
     dataframe = dataframe.fillna(0)
     dataframe.rename(columns={'Unnamed: 0': 'ticker'}, inplace=True)
     dataframe['date'] = date_str
-    # if i == 0:
-    #     # This makes the most recent one test data. Comment if shuffling from one massive df
-    #     test = dataframe
-    # else:
-    #     dataframes.append(dataframe)
+    if i == 0:
+        # This makes the most recent one test data. Comment if shuffling from one massive df
+        test = dataframe
+    else:
+        dataframes.append(dataframe)
 
-    # Uncomment this if all results are contained
-    dataframes.append(dataframe)
+    # Uncomment this if all results are contained, comment if using test data w/o results
+    # dataframes.append(dataframe)
 
     i += 1
 
@@ -114,14 +114,14 @@ dataframe = dataframe.drop(columns=['Y'])
 dates = dataframe.pop('date').to_frame()
 
 # Comment this if all data has results
-# test_dates = test.pop('date').to_frame()
+test_dates = test.pop('date').to_frame()
 
 
 # Splitting data if needed
-train, test = train_test_split(dataframe, test_size=0.2)
+# train, test = train_test_split(dataframe, test_size=0.2)
 # Swap train as argument (used when all data has a result) with dataframe and comment above if using recent data w/o
 # results as test.
-train, val = train_test_split(train, test_size=0.2)
+train, val = train_test_split(dataframe, test_size=0.2)
 print(len(train), 'train examples')
 print(len(val), 'validation examples')
 print(len(test), 'test examples')
