@@ -5,10 +5,14 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras import layers
+from tensorflow.keras import layers, callbacks
 from tensorflow.keras.layers.experimental import preprocessing
+from tensorflow.keras.optimizers import Adam
+
 import os
 import re
+import tensorflow_probability as tfp
+import math
 
 data_dir = Path.cwd() / 'data' / 'ml'
 today = dt.date.today().strftime("%m-%d-%Y")
@@ -75,7 +79,7 @@ for file in os.listdir(data_dir):
 
     match = re.search(r'\d\d-\d\d-\d\d\d\d', file)
 
-    if match and 'normalized' in file:
+    if match and 'normalized' not in file and 'data' in file:
         files.append(file)
         # df = pd.read_csv(data_dir / file, index_col=0, dtype={"mentions": np.int32})
 
@@ -93,69 +97,93 @@ for file in files:
     dataframe = dataframe.fillna(0)
     dataframe.rename(columns={'Unnamed: 0': 'ticker'}, inplace=True)
     dataframe['date'] = date_str
-    if i == 0:
-        test = dataframe
-    else:
-        dataframes.append(dataframe)
+    # if i == 0:
+    #     # This makes the most recent one test data. Comment if shuffling from one massive df
+    #     test = dataframe
+    # else:
+    #     dataframes.append(dataframe)
+
+    # Uncomment this if all results are contained
+    dataframes.append(dataframe)
+
     i += 1
 
 dataframe = pd.concat(dataframes, ignore_index=True)
 dataframe['target'] = np.where(dataframe['Y'] == 1, 1, 0)
 dataframe = dataframe.drop(columns=['Y'])
 dates = dataframe.pop('date').to_frame()
-test_dates = test.pop('date').to_frame()
 
-train = dataframe
+# Comment this if all data has results
+# test_dates = test.pop('date').to_frame()
+
+
 # Splitting data if needed
-# train, test = train_test_split(dataframe, test_size=0.2)
+train, test = train_test_split(dataframe, test_size=0.2)
+# Swap train as argument (used when all data has a result) with dataframe and comment above if using recent data w/o
+# results as test.
 train, val = train_test_split(train, test_size=0.2)
 print(len(train), 'train examples')
 print(len(val), 'validation examples')
 print(len(test), 'test examples')
+# print(pd.isnull(dataframe).sum(),pd.isnull(train).sum(),pd.isnull(val).sum(),pd.isnull(test).sum())
 
 batch_size = 8
-train_ds = df_to_dataset(train, shuffle=False,batch_size=batch_size)
+train_ds = df_to_dataset(train, batch_size=batch_size)
 val_ds = df_to_dataset(val, shuffle=False, batch_size=batch_size)
 test_ds = df_to_dataset(test, shuffle=False, batch_size=batch_size)
 
 # Training model
-# all_inputs = []
-# encoded_features = []
-#
-# # Numeric features.
-# for header in ['rank', 'mentions', 'change', 'days_since_max_rise', 'days_since_last_rise',
-#                'rsi', 'bb_val', 'macd', 'ichimoku', 'news_sentiment', 'DTE', 'max_intraday_change_1mo',
-#                'put_call_ratio', 'put_call_value_ratio', 'sentiment', 'short_interest']:
-#     numeric_col = tf.keras.Input(shape=(1,), name=header)
-#     normalization_layer = get_normalization_layer(header, train_ds)
-#     encoded_numeric_col = normalization_layer(numeric_col)
-#     all_inputs.append(numeric_col)
-#     encoded_features.append(encoded_numeric_col)
-#
-# # Categorical features encoded as string.
-# categorical_cols = ['ticker']
-# for header in categorical_cols:
-#     categorical_col = tf.keras.Input(shape=(1,), name=header, dtype='string')
-#     encoding_layer = get_category_encoding_layer(header, train_ds, dtype='string',
-#                                                  max_tokens=5)
-#     encoded_categorical_col = encoding_layer(categorical_col)
-#     all_inputs.append(categorical_col)
-#     encoded_features.append(encoded_categorical_col)
-#
-# all_features = tf.keras.layers.concatenate(encoded_features)
-# x = tf.keras.layers.Dense(32, activation="sigmoid")(all_features)
-# x = tf.keras.layers.Dropout(0.5)(x)
-# output = tf.keras.layers.Dense(1)(x)
-# model = tf.keras.Model(all_inputs, output)
-# model.compile(optimizer='adam',
-#               loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
-#               metrics=["accuracy"])
-#
-# model.fit(train_ds, epochs=10, validation_data=val_ds)
-# model.save('model')
+all_inputs = []
+encoded_features = []
+
+# Numeric features.
+for header in ['rank', 'mentions', 'change', 'days_since_max_rise', 'days_since_last_rise',
+               'rsi', 'bb_val', 'macd', 'ichimoku', 'news_sentiment', 'DTE', 'max_intraday_change_1mo',
+               'put_call_ratio', 'put_call_value_ratio', 'sentiment', 'short_interest']:
+    numeric_col = tf.keras.Input(shape=(1,), name=header)
+    normalization_layer = get_normalization_layer(header, train_ds)
+    encoded_numeric_col = normalization_layer(numeric_col)
+    all_inputs.append(numeric_col)
+    encoded_features.append(encoded_numeric_col)
+
+# Categorical features encoded as string.
+categorical_cols = ['ticker']
+for header in categorical_cols:
+    categorical_col = tf.keras.Input(shape=(1,), name=header, dtype='string')
+    encoding_layer = get_category_encoding_layer(header, train_ds, dtype='string',
+                                                 max_tokens=5)
+    encoded_categorical_col = encoding_layer(categorical_col)
+    all_inputs.append(categorical_col)
+    encoded_features.append(encoded_categorical_col)
+
+all_features = tf.keras.layers.concatenate(encoded_features)
+x = tf.keras.layers.Dense(32, activation="sigmoid")(all_features)
+x = tf.keras.layers.Dropout(0.5)(x)
+output = tf.keras.layers.Dense(1)(x)
+model = tf.keras.Model(all_inputs, output)
+model.compile(optimizer='adam',
+              loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
+              metrics=["accuracy"])
+
+reduce_lr = callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1,
+                              patience=5, min_lr=0.001,)
+
+checkpoint_filepath = './tmp/checkpoint'
+model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+    filepath=checkpoint_filepath,
+    save_weights_only=True,
+    monitor='val_accuracy',
+    mode='max',
+    save_best_only=True)
+
+model.fit(train_ds, epochs=50, validation_data=val_ds,callbacks=[reduce_lr, model_checkpoint_callback])
+
+model.load_weights(checkpoint_filepath)
+
+model.save('model')
 
 # Load the model instead of fitting
-model = tf.keras.models.load_model('model')
+# model = tf.keras.models.load_model('model')
 
 # for layer in model.layers:
 #     print(layer.name)
@@ -163,7 +191,7 @@ model = tf.keras.models.load_model('model')
 #     print()
 
 # Accyracy
-loss, accuracy = model.evaluate(val_ds)
+loss, accuracy = model.evaluate(test_ds)
 print("Accuracy", accuracy)
 
 test_data_dict = test.to_dict(orient='records')
@@ -171,12 +199,19 @@ sample = test_data_dict[0]
 test_input = {name: tf.convert_to_tensor([value]) for name, value in sample.items()}
 # test predictions
 predictions = model.predict(x=test_ds)
+
+# prob = np.argmax(predictions, axis=1)
 prob = tf.nn.sigmoid(predictions)
+# prob = ((predictions > 0.5)+0).ravel()
+# prob = tf.nn.softplus(predictions)
 prob = tf.keras.backend.get_value(prob % (100 * prob))
 
 # Save to .csv
 new_df = test[['ticker']]
+# Make this 0 if using actual live test data.
+# new_df['actual'] = test[['target']]
 new_df['actual'] = 0
 new_df['pred'] = np.array(prob)
-new_df = new_df.join(test_dates, how='left')
+# Swap test_dates and dates depending on which is test data, {dates} is if results are in all the data
+new_df = new_df.join(dates, how='left')
 new_df.to_csv(data_dir / 'predictions.csv')

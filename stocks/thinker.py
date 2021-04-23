@@ -306,15 +306,15 @@ def append_to_table(data_dir, data, date_str, name="", overwrite=False):
     :return: none, saves .csv file
     """
     data = data.fillna(0)
-    today = date.today().strftime("%m-%d-%Y")
 
     label = data.columns.values[0]
-    save_path = Path(data_dir / ("data_" + today + ".csv"))
+    save_path = Path(data_dir / ("data_" + date_str + ".csv"))
 
     try:
         data_df = pd.read_csv(save_path, header=0, index_col=0)
 
     except:
+
         data_df = pd.read_csv(data_dir / ('wsb_sentiment_' + date_str + '.csv'), header=0, index_col=0)
 
     data_df[label] = np.zeros(len(data_df))
@@ -328,10 +328,10 @@ def append_to_table(data_dir, data, date_str, name="", overwrite=False):
         if data_tickers[i] in tickers:
             data_df.loc[data_tickers[i], label] = data_filtered[i]
 
-    save_path = Path(data_dir / ("data_" + today + ".csv"))
+    save_path = Path(data_dir / ("data_" + date_str + ".csv"))
 
     if save_path.is_file() and not overwrite:
-        overwrite = input(f'Data file already exists for today. Overwrite with {name} data? (Y/N) ')
+        overwrite = input(f'Data file already exists for {date_str}. Overwrite with {name} data? (Y/N) ')
 
         if overwrite == 'Y' or overwrite == 'y':
 

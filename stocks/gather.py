@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup
 
 num_proc = mp.cpu_count() - 1
 
+
 def gather_stock_data(tickers, time_span, interval):
     """
     This will be deprecated
@@ -113,9 +114,10 @@ def gather_multi(syms, **kwargs):
     if key == 'all':
         pass
     else:
-        df = df.filter(like=key,axis=1)
+        df = df.filter(like=key, axis=1)
 
     return df
+
 
 def gather_DTE(tickers):
     today = date.today()
@@ -128,10 +130,11 @@ def gather_DTE(tickers):
             delta = next_date - today
             delta = int(delta.days)
         except:
-            delta=0
+            delta = 0
         df.loc[ticker, 'DTE'] = delta
 
     return df
+
 
 def gather_single_prices(ticker, period="1mo"):
     ticker = yf.Ticker(ticker)
@@ -163,7 +166,7 @@ def get_call_put_ratio(tickers):
             df.loc[ticker, 'put_call_ratio'] = 0
 
             continue
-
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
     df = df.fillna(0)
     return df
 
@@ -191,7 +194,7 @@ def get_put_call_magnitude(tickers):
             df.loc[ticker, 'put_call_value_ratio'] = 0
 
             continue
-
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
     df = df.fillna(0)
     return df
 
@@ -289,32 +292,39 @@ def gather_wsb_tickers(data_dir, date_str):
 
     return tickers
 
-def gather_results(prices,tickers):
 
+def gather_results(prices, tickers):
     change = pd.DataFrame(index=tickers, columns=['Y'])
 
     for x in tickers:
         changes = []
-        for index, row in prices.iterrows():
+        if prices.shape[0] == 1:
+            for index, row in prices.iterrows():
+                high = prices.High.loc[index, x]
+                open = prices.Open.loc[index, x]
+                delta = (high - open) / open
+                changes.append(delta)
 
-            high = prices.High.loc[index,x]
-            open = prices.Open.loc[index,x]
-            delta = (high - open) / open
+            change.loc[x, 'Y'] = max(changes)
+        else:
+            high = prices[('High', x)]
+            open = prices[('Open', x)]
+            close = prices[('Close', x)]
+            delta = (high[1] - open[1]) / open[1]
+            # delta = (high.values - open.values) / open.values
             changes.append(delta)
+            delta = (high[1] - close[0]) / close[0]
+            changes.append(delta)
+            change.loc[x, 'Y'] = max(changes)
 
-        change.loc[x,'Y'] = max(changes)
-
-
+    change.fillna(0, inplace=True)
     change[change < 0.06] = 0
-
     change[change != 0] = 1
-
 
     return change
 
 
 def scrape_news_sentiment(tickers=None):
-
     # tickers = ['GME','AMC']
     nltk.download('vader_lexicon')
     df = pd.DataFrame(index=tickers, columns=['news_sentiment'])
@@ -355,12 +365,11 @@ def scrape_news_sentiment(tickers=None):
         except:
             news_headlines[ticker].append('')
 
-
     vader = SentimentIntensityAnalyzer()
 
-    for ticker,value in news_headlines.items():
+    for ticker, value in news_headlines.items():
         # This is the avg score between -1 and 1 of the all the news headlines
-        news_df = pd.DataFrame(news_headlines[ticker],columns=['headline'])
+        news_df = pd.DataFrame(news_headlines[ticker], columns=['headline'])
         scores = news_df['headline'].apply(vader.polarity_scores).tolist()
         scores_df = pd.DataFrame(scores)
         score = scores_df['compound'].mean()
@@ -368,6 +377,4 @@ def scrape_news_sentiment(tickers=None):
         # news_df = news_df.join(scores_df, rsuffix='_right')
         # news_df['date'] = pd.to_datetime(news_df.date).dt.date
 
-
     return df
-

@@ -100,14 +100,23 @@ if args.results:
         path = data_dir / file
         date_str = re.search(r'\d\d-\d\d-\d\d\d\d', file)[0]
         date2 = dt.datetime.strptime(date_str,"%m-%d-%Y")
-        # Check if there was spike in past 5 days for target column
-        date1 = date2 - dt.timedelta(days=5)
-        sd = date1.strftime("%Y-%m-%d")
-        ed = date2.strftime("%Y-%m-%d")
+        # Check if there was spike in past 2 days for target column
+        date1 = date2 + dt.timedelta(days=1)
+        date3 = date2 - dt.timedelta(days=1)
 
+        weekno = date1.weekday()
         data = pd.read_csv(path, index_col=0)
         tickers = stocks.gather_wsb_tickers(data_dir, date_str)
-        prices = stocks.gather_multi(tickers, start_date=sd,end_date=ed,key='all')
+
+        bd = date3.strftime("%Y-%m-%d")
+        sd = date2.strftime("%Y-%m-%d")
+        ed = date1.strftime("%Y-%m-%d")
+
+        if weekno == 5 or weekno == 6:
+            prices = stocks.gather_multi(tickers, period="1d", key='all')
+        else:
+            prices = stocks.gather_multi(tickers, start_date=bd, end_date=ed, key='all')
+
         result = stocks.gather_results(prices,tickers)
-        stocks.append_to_table(data_dir,data=result,date_str=today)
+        stocks.append_to_table(data_dir,data=result,date_str=date_str,overwrite=False)
 
