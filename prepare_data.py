@@ -55,9 +55,18 @@ if args.normalize:
 
             if param == "min_max":
 
-                normalized_data = stocks.min_max_normalize(data, ignored_columns=['put_call_ratio', 'put_call_value_ratio',
-                                                                                  'max_intraday_change_1mo', 'sentiment',
-                                                                                  'short_interest','Y'])
+                try:
+
+                    normalized_data = stocks.min_max_normalize(data, ignored_columns=['put_call_ratio',
+                                                                                      'put_call_value_ratio',
+                                                                                      'max_intraday_change_1mo',
+                                                                                      'sentiment',
+                                                                                      'short_interest','Y'])
+                except:
+
+                    print("Check if 'Y' column is present.")
+                    quit()
+
             elif param == "standard":
 
                 normalized_data = stocks.standard_score_normalize(data, ignored_columns=['Y'])

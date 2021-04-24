@@ -1,21 +1,13 @@
 from pathlib import Path
 import datetime as dt
-import tensorflow as tf
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras import layers, callbacks
 from tensorflow.keras.layers.experimental import preprocessing
-from tensorflow.keras.optimizers import Adam
-
+from tensorflow.keras import callbacks
+import tensorflow as tf
 import os
 import re
-import tensorflow_probability as tfp
-import math
-
-data_dir = Path.cwd() / 'data' / 'ml'
-today = dt.date.today().strftime("%m-%d-%Y")
 
 
 # A utility method to create a tf.data dataset from a Pandas Dataframe
@@ -73,6 +65,15 @@ def get_category_encoding_layer(name, dataset, dtype, max_tokens=None):
     return lambda feature: encoder(index(feature))
 
 
+# Configuration variables
+data_dir = Path.cwd() / 'data' / 'ml'
+today = dt.date.today().strftime("%m-%d-%Y")
+# Set to 'train' or 'predict', see README.md for detailed instructions
+runtype = 'train'
+# Set to 'train' or 'load', see README.md for detailed instructions
+model_source = 'train'
+
+
 files = []
 
 for file in os.listdir(data_dir):
@@ -97,14 +98,18 @@ for file in files:
     dataframe = dataframe.fillna(0)
     dataframe.rename(columns={'Unnamed: 0': 'ticker'}, inplace=True)
     dataframe['date'] = date_str
-    if i == 0:
-        # This makes the most recent one test data. Comment if shuffling from one massive df
-        test = dataframe
-    else:
-        dataframes.append(dataframe)
+    if runtype == 'predict':
+        if i == 0:
+            # This makes the most recent one test data. Comment if shuffling from one massive df
+            test = dataframe
+        else:
+            dataframes.append(dataframe)
+    elif runtype == 'train':
 
-    # Uncomment this if all results are contained, comment if using test data w/o results
-    # dataframes.append(dataframe)
+        dataframes.append(dataframe)
+    else:
+        print("Not a valid option entered for 'type'. See README")
+        quit()
 
     i += 1
 
@@ -113,91 +118,99 @@ dataframe['target'] = np.where(dataframe['Y'] == 1, 1, 0)
 dataframe = dataframe.drop(columns=['Y'])
 dates = dataframe.pop('date').to_frame()
 
-# Comment this if all data has results
-test_dates = test.pop('date').to_frame()
+
+if runtype == 'predict':
+    test_dates = test.pop('date').to_frame()
+    train, val = train_test_split(dataframe, test_size=0.2)
+    print(len(val), 'validation examples')
+    print(len(test), 'test examples')
+    print(len(train), 'train examples')
+
+elif runtype == 'train':
+    train, test = train_test_split(dataframe, test_size=0.2)
+    train, val = train_test_split(train, test_size=0.2)
+    print(len(val), 'validation examples')
+    print(len(test), 'test examples')
+    print(len(train), 'train examples')
 
 
-# Splitting data if needed
-# train, test = train_test_split(dataframe, test_size=0.2)
-# Swap train as argument (used when all data has a result) with dataframe and comment above if using recent data w/o
-# results as test.
-train, val = train_test_split(dataframe, test_size=0.2)
-print(len(train), 'train examples')
-print(len(val), 'validation examples')
-print(len(test), 'test examples')
+# Check if any nan values
 # print(pd.isnull(dataframe).sum(),pd.isnull(train).sum(),pd.isnull(val).sum(),pd.isnull(test).sum())
 
-batch_size = 8
-train_ds = df_to_dataset(train, batch_size=batch_size)
-val_ds = df_to_dataset(val, shuffle=False, batch_size=batch_size)
-test_ds = df_to_dataset(test, shuffle=False, batch_size=batch_size)
+if model_source == 'train':
+    batch_size = 16
+    train_ds = df_to_dataset(train, batch_size=batch_size)
+    val_ds = df_to_dataset(val, shuffle=False, batch_size=batch_size)
+    test_ds = df_to_dataset(test, shuffle=False, batch_size=batch_size)
 
-# Training model
-all_inputs = []
-encoded_features = []
+    all_inputs = []
+    encoded_features = []
 
-# Numeric features.
-for header in ['rank', 'mentions', 'change', 'days_since_max_rise', 'days_since_last_rise',
-               'rsi', 'bb_val', 'macd', 'ichimoku', 'news_sentiment', 'DTE', 'max_intraday_change_1mo',
-               'put_call_ratio', 'put_call_value_ratio', 'sentiment', 'short_interest']:
-    numeric_col = tf.keras.Input(shape=(1,), name=header)
-    normalization_layer = get_normalization_layer(header, train_ds)
-    encoded_numeric_col = normalization_layer(numeric_col)
-    all_inputs.append(numeric_col)
-    encoded_features.append(encoded_numeric_col)
+    # Numeric features.
+    for header in ['rank', 'mentions', 'change', 'days_since_max_rise', 'days_since_last_rise',
+                   'rsi', 'bb_val', 'macd', 'ichimoku', 'news_sentiment', 'DTE', 'max_intraday_change_1mo',
+                   'put_call_ratio', 'put_call_value_ratio', 'sentiment', 'short_interest']:
+        numeric_col = tf.keras.Input(shape=(1,), name=header)
+        normalization_layer = get_normalization_layer(header, train_ds)
+        encoded_numeric_col = normalization_layer(numeric_col)
+        all_inputs.append(numeric_col)
+        encoded_features.append(encoded_numeric_col)
 
-# Categorical features encoded as string.
-categorical_cols = ['ticker']
-for header in categorical_cols:
-    categorical_col = tf.keras.Input(shape=(1,), name=header, dtype='string')
-    encoding_layer = get_category_encoding_layer(header, train_ds, dtype='string',
-                                                 max_tokens=5)
-    encoded_categorical_col = encoding_layer(categorical_col)
-    all_inputs.append(categorical_col)
-    encoded_features.append(encoded_categorical_col)
+    # Categorical features encoded as string.
+    categorical_cols = ['ticker']
+    for header in categorical_cols:
+        categorical_col = tf.keras.Input(shape=(1,), name=header, dtype='string')
+        encoding_layer = get_category_encoding_layer(header, train_ds, dtype='string',
+                                                     max_tokens=5)
+        encoded_categorical_col = encoding_layer(categorical_col)
+        all_inputs.append(categorical_col)
+        encoded_features.append(encoded_categorical_col)
 
-all_features = tf.keras.layers.concatenate(encoded_features)
-x = tf.keras.layers.Dense(32, activation="sigmoid")(all_features)
-x = tf.keras.layers.Dropout(0.5)(x)
-output = tf.keras.layers.Dense(1)(x)
-model = tf.keras.Model(all_inputs, output)
-model.compile(optimizer='adam',
-              loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
-              metrics=["accuracy"])
+    all_features = tf.keras.layers.concatenate(encoded_features)
+    x = tf.keras.layers.Dense(32, activation="sigmoid")(all_features)
+    x = tf.keras.layers.Dropout(0.5)(x)
+    output = tf.keras.layers.Dense(1)(x)
+    model = tf.keras.Model(all_inputs, output)
+    model.compile(optimizer='adam',
+                  loss=tf.keras.losses.BinaryCrossentropy(from_logits=True),
+                  metrics=["accuracy"])
 
-reduce_lr = callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1,
-                              patience=5, min_lr=0.001,)
+    reduce_lr = callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
+                                  patience=5, min_lr=0.001,)
 
-checkpoint_filepath = './tmp/checkpoint'
-model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-    filepath=checkpoint_filepath,
-    save_weights_only=True,
-    monitor='val_accuracy',
-    mode='max',
-    save_best_only=True)
+    checkpoint_filepath = './tmp/checkpoint'
+    model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+        filepath=checkpoint_filepath,
+        save_weights_only=True,
+        monitor='val_accuracy',
+        mode='max',
+        save_best_only=True)
 
-model.fit(train_ds, epochs=50, validation_data=val_ds,callbacks=[reduce_lr, model_checkpoint_callback])
+    model.fit(train_ds, epochs=100, validation_data=val_ds,callbacks=[reduce_lr, model_checkpoint_callback])
 
-model.load_weights(checkpoint_filepath)
+    model.load_weights(checkpoint_filepath)
 
-model.save('model')
+    model.save('model')
 
-# Load the model instead of fitting
-# model = tf.keras.models.load_model('model')
+elif model_source == 'load':
+    model = tf.keras.models.load_model('model')
 
+# Get weights if needded
 # for layer in model.layers:
 #     print(layer.name)
 #     print(layer.get_weights())
 #     print()
 
-# Accyracy
-loss, accuracy = model.evaluate(test_ds)
-print("Accuracy", accuracy)
+# Accuracy, swap val_ds with test_ds depending on what data is tested
+if runtype=='train':
+    loss, accuracy = model.evaluate(val_ds)
+elif runtype=='predict':
+    loss, accuracy = model.evaluate(test_ds)
 
+print("Accuracy", accuracy)
 test_data_dict = test.to_dict(orient='records')
 sample = test_data_dict[0]
 test_input = {name: tf.convert_to_tensor([value]) for name, value in sample.items()}
-# test predictions
 predictions = model.predict(x=test_ds)
 
 # prob = np.argmax(predictions, axis=1)
@@ -209,9 +222,14 @@ prob = tf.keras.backend.get_value(prob % (100 * prob))
 # Save to .csv
 new_df = test[['ticker']]
 # Make this 0 if using actual live test data.
-# new_df['actual'] = test[['target']]
-new_df['actual'] = 0
 new_df['pred'] = np.array(prob)
-# Swap test_dates and dates depending on which is test data, {dates} is if results are in all the data
+if runtype == 'train':
+    new_df['actual'] = test[['target']]
+    new_df = new_df.join(dates, how='left')
+elif runtype == 'predict':
+    new_df['actual'] = 0
+    new_df = new_df.join(test_dates, how='left')
+
+
 new_df = new_df.join(dates, how='left')
 new_df.to_csv(data_dir / 'predictions.csv')
