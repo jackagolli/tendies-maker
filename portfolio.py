@@ -8,9 +8,9 @@ that will maximize the Sharpe ratio for a portfolio of those tickers given the t
 """
 tickers = ['MSFT','AAPL', 'AMD','QCOM','ADBE', 'ACN', 'LRCX','ISRG','TMO','ILMN','MSFT','DIS','SWKS',
            'AMAT','SQ','TEAM','AMZN','NVDA','INTC','GOOGL','SPCE','CRM','MU','SHOP','NFLX','TSLA','NIO',
-           'PLTR','WKHS','ARKK','PYPL','PLUG']
+           'WKHS','ARKK','PYPL','PLUG','PLTR']
 
-sd = dt.datetime(2020, 3, 27)
+sd = dt.datetime(2016, 4, 13)
 ed = dt.datetime(2021, 4, 13)
 start_val = 1000
 

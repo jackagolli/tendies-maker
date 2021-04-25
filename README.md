@@ -18,6 +18,7 @@ conda install --file requirements.txt
 ```
 
 ## Usage
+Make sure to set desired data directory in header of files.
 ### Gathering data
 Run within virtual environment, conda environment, or using any Python installation with 
 required libraries. Get commands help using -h
