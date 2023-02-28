@@ -1,6 +1,6 @@
 from loguru import logger
 
-from tendies_maker.datamodel import TrainingData
+from ..datamodel import TrainingData
 
 logger.info("Instantiate training data by scraping WSB, looking for 5% spike in last 30 days")
 td = TrainingData(tgt_pct=0.05, tgt_days=30)
