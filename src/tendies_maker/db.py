@@ -7,12 +7,6 @@ class DIO:
     def __init__(self):
         self.engine = create_engine(os.environ["SQLALCHEMY_DATABASE_URI"], echo=True)
 
-
-    def init_db(self):
-
-        return None
-
-
-    def append_data(self, data):
+    def write_data(self, data):
 
         return None

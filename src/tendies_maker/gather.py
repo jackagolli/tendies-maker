@@ -5,12 +5,13 @@ import datetime
 import requests
 import re
 import multiprocessing as mp
-from datetime import date
+from datetime import date, timezone
 from pathlib import Path
 from urllib.request import urlopen, Request
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 import nltk
 from bs4 import BeautifulSoup
+from tqdm import tqdm
 
 num_proc = mp.cpu_count() - 1
 
@@ -120,20 +121,23 @@ def gather_multi(syms, **kwargs):
 
 
 def gather_DTE(tickers):
-    today = date.today()
     df = pd.DataFrame(index=tickers, columns=['DTE'])
-    for ticker in tickers:
+
+    for ticker in tqdm(tickers):
         yf_ticker = yf.Ticker(ticker)
-        try:
-            calendar = yf_ticker.calendar
-            next_date = calendar.loc["Earnings Date"][0].to_pydatetime().date()
-            delta = next_date - today
-            delta = int(delta.days)
-        except:
-            delta = 0
+        dates = yf_ticker.earnings_dates
+        delta = 0
+        if dates is not None:
+            future_dates = [x for x in dates.index.to_pydatetime().tolist() if x > datetime.datetime.now(timezone.utc)]
+            if future_dates:
+                next_date = future_dates[-1].date()
+                delta = next_date - date.today()
+                delta = int(delta.days)
+
         df.loc[ticker, 'DTE'] = delta
 
     return df
+
 
 
 def gather_single_prices(ticker, period="1mo"):
@@ -144,8 +148,8 @@ def gather_single_prices(ticker, period="1mo"):
 
 
 def get_call_put_ratio(tickers):
-    df = pd.DataFrame(index=tickers, columns=['put_call_ratio'])
-    for ticker in tickers:
+    df = pd.DataFrame(index=tickers, columns=['Put Call Volume Ratio'])
+    for ticker in tqdm(tickers):
         total_put_vol = 0
         total_call_vol = 0
         single = yf.Ticker(ticker)
@@ -159,11 +163,11 @@ def get_call_put_ratio(tickers):
                 total_call_vol += calls['volume'].sum()
                 total_put_vol += puts['volume'].sum()
 
-            df.loc[ticker, 'put_call_ratio'] = total_put_vol / total_call_vol
+            df.loc[ticker, 'Put Call Volume Ratio'] = total_put_vol / total_call_vol
 
         except:
 
-            df.loc[ticker, 'put_call_ratio'] = 0
+            df.loc[ticker, 'Put Call Volume Ratio'] = 0
 
             continue
     df.replace([np.inf, -np.inf], np.nan, inplace=True)
@@ -172,8 +176,8 @@ def get_call_put_ratio(tickers):
 
 
 def get_put_call_magnitude(tickers):
-    df = pd.DataFrame(index=tickers, columns=['put_call_value_ratio'])
-    for ticker in tickers:
+    df = pd.DataFrame(index=tickers, columns=['Put Call Value Ratio'])
+    for ticker in tqdm(tickers):
         total_put_val = 0
         total_call_val = 0
         single = yf.Ticker(ticker)
@@ -187,11 +191,11 @@ def get_put_call_magnitude(tickers):
                 total_call_val += np.sum((calls['volume'].values * calls['lastPrice'].values))
                 total_put_val += np.sum((puts['volume'].values * puts['lastPrice'].values))
 
-            df.loc[ticker, 'put_call_value_ratio'] = total_put_val / total_call_val
+            df.loc[ticker, 'Put Call Value Ratio'] = total_put_val / total_call_val
 
         except:
 
-            df.loc[ticker, 'put_call_value_ratio'] = 0
+            df.loc[ticker, 'Put Call Value Ratio'] = 0
 
             continue
     df.replace([np.inf, -np.inf], np.nan, inplace=True)

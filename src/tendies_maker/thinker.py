@@ -1,19 +1,15 @@
-import datetime
 import numpy as np
 import scipy.optimize as spo
-import matplotlib.pyplot as plt
 import plotly.graph_objs as go
 import pandas as pd
 import yfinance as yf
 import os
 import re
-from matplotlib.dates import DateFormatter
 import multiprocessing as mp
 from pathlib import Path
 from datetime import date
 import datetime
 from sklearn.preprocessing import MinMaxScaler
-from io import StringIO
 num_proc = mp.cpu_count() - 1
 
 
