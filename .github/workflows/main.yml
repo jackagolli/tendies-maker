@@ -5,7 +5,7 @@ on:
     - cron: "0 0 * * 1-5"
 jobs:
   deploy_source:
-    name: deploy lambda from source
+    name: daily data run
     runs-on: ubuntu-latest
     steps:
       - name: checkout source code
