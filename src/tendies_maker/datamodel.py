@@ -19,8 +19,8 @@ from ta.volatility import BollingerBands
 from ta.volume import MFIIndicator
 from tqdm import tqdm
 
-from .utils import pct_to_numeric
-from .gather import gather_DTE, get_put_call_magnitude, get_call_put_ratio
+from src.tendies_maker.utils import pct_to_numeric
+from src.tendies_maker.gather import gather_DTE, get_put_call_magnitude, get_call_put_ratio
 
 
 class TrainingData(BaseModel):
