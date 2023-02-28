@@ -1,4 +1,4 @@
-name: deploy to lambda
+name: daily data run
 on:
   workflow_dispatch:
   schedule:
