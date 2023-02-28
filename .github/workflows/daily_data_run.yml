@@ -8,15 +8,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: tendies-maker
     steps:
-      - name: log secrets
-        env:
-          ALPACA_API_KEY: ${{ env.ALPACA_API_KEY }}
-          ALPACA_SECRET_KEY: ${{ env.ALPACA_SECRET_KEY }}
-          SQLALCHEMY_DATABASE_URI: ${{ env.SQLALCHEMY_DATABASE_URI }}
-
-        run: |
-            echo $ALPACA_API_KEY
-            echo $ALPACA_SECRET_KEY
       - name: checkout repo content
         uses: actions/checkout@v3
       - name: setup python
@@ -29,6 +20,6 @@ jobs:
       - name: execute py script # run main.py
         run: python -m jobs.generate_data
         env:
-          ALPACA_API_KEY: ${{ env.ALPACA_API_KEY }}
-          ALPACA_SECRET_KEY: ${{ env.ALPACA_SECRET_KEY }}
-          SQLALCHEMY_DATABASE_URI: ${{ env.SQLALCHEMY_DATABASE_URI }}
+          ALPACA_API_KEY: ${{ vars.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ vars.ALPACA_SECRET_KEY }}
+          SQLALCHEMY_DATABASE_URI: ${{ vars.SQLALCHEMY_DATABASE_URI }}
