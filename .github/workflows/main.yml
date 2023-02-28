@@ -26,4 +26,4 @@ jobs:
           aws_secret_access_key: ${{ secrets.SECRET_KEY }}
           aws_region: ${{ secrets.AWS_REGION }}
           function_name: daily-data-run
-          source: [jobs/generate_data.py, requirements.txt]
+          source: [src/tendies_maker/jobs/generate_data.py, requirements.txt]
