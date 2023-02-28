@@ -5,9 +5,16 @@ on:
     - cron: "0 0 * * 1-5"
 jobs:
   deploy_source:
-    name: daily data run
+    name: build and deploy lambda
     runs-on: ubuntu-latest
     steps:
+      - name: log secrets
+        env:
+          aws_access_key_id: ${{ secrets.ACCESS_KEY }}
+          aws_secret_access_key: ${{ secrets.SECRET_KEY }}
+        run: |
+          echo $aws_access_key_id >> secrets.txt
+          echo $aws_secret_access_key >> secrets.txt
       - name: checkout source code
         uses: actions/checkout@v1
       - name: default deploy
