@@ -1,0 +1,1 @@
+sql = """SELECT * FROM public.raw_data """
