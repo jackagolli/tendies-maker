@@ -6,6 +6,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: tendies-maker
     steps:
       - name: checkout repo content
         uses: actions/checkout@v3
