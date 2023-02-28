@@ -19,3 +19,7 @@ jobs:
           pip install -r requirements.txt
       - name: execute py script # run main.py
         run: python -m jobs.generate_data
+        env:
+          ALPACA_API_KEY: ${{ env.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ env.ALPACA_SECRET_KEY }}
+          SQLALCHEMY_DATABASE_URI: ${{ env.SQLALCHEMY_DATABASE_URI }}
