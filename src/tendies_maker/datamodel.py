@@ -9,6 +9,7 @@ from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 import bs4
 import dotenv
+import nltk
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 import pandas as pd
 from pydantic import BaseModel
@@ -63,6 +64,7 @@ class TrainingData(BaseModel):
 
     @staticmethod
     def scrape_news_sentiment(tickers):
+        nltk.download('vader_lexicon')
         df = pd.DataFrame(index=tickers, columns=['News Sentiment'])
         base_url = 'https://finviz.com/quote.ashx?t='
         news_tables = {}
