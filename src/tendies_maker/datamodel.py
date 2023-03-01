@@ -12,6 +12,7 @@ import dotenv
 import nltk
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 import pandas as pd
+import pandas_datareader as pdr
 from pydantic import BaseModel
 from sqlalchemy import create_engine
 from ta.momentum import RSIIndicator
@@ -127,8 +128,20 @@ class TrainingData(BaseModel):
         bars = stock_client.get_stock_bars(request_params)
         return bars.df
 
+    def append_macro_econ_data(self):
+        today = datetime.datetime.today()
+        labels = {'PCE': 'PCE', 'UNRATE': 'Unemployment', 'MICH': 'Inflation Expectation', 'JTSJOL': 'Job Openings'}
+        inflation = pdr.data.DataReader(list(labels.keys()), 'fred', today - datetime.timedelta(
+            days=180), today)
+        inflation = inflation.apply(lambda x: x.shift(x.isnull().sum()), axis=0)
+        inflation.rename(columns=labels, inplace=True)
+        records = inflation.pct_change().iloc[-1:].to_dict('records')[0]
+        self.raw_data = self.raw_data.assign(**records)
+        return None
+
     def append_all(self):
         self.append_ta()
+        self.append_macro_econ_data()
         self.append_short_interest()
         self.append_news_sentiment()
         self.append_dte()
