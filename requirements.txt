@@ -1,4 +1,5 @@
 alpaca-py~=0.7.1
+boto3~=1.26.81
 beautifulsoup4~=4.11.2
 matplotlib~=3.7.0
 nltk~=3.6.1
