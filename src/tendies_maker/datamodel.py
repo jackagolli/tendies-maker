@@ -171,13 +171,14 @@ class TrainingData(BaseModel):
 
     def write_data(self):
         self.raw_data['Date'] = self.date
-        try:
-            # this will fail if there is a new column
-            self.raw_data.to_sql("raw_data", con=db.engine, if_exists="append", index=True)
-        except:
-            data = pd.read_sql('SELECT * FROM public.raw_data', db.engine)
-            data = pd.concat([data, self.raw_data])
-            data.to_sql(name='sql_table', con=db.engine, if_exists='replace', index=False)
+        with db.engine.begin() as conn:
+            try:
+                # this will fail if there is a new column
+                self.raw_data.to_sql("raw_data", con=conn, if_exists="append", index=True)
+            except:
+                data = pd.read_sql('SELECT * FROM public.raw_data', db.engine)
+                data = pd.concat([data, self.raw_data])
+                data.to_sql(name='sql_table', con=conn, if_exists='replace', index=False)
         return None
 
     def append_macro_econ_data(self):
