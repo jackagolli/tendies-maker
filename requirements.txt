@@ -18,3 +18,4 @@ setuptools~=65.5.1
 ta~=0.10.2
 tqdm~=4.60.0
 loguru~=0.6.0
+psycopg2~=2.9.5
