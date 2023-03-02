@@ -175,10 +175,16 @@ class TrainingData(BaseModel):
             try:
                 # this will fail if there is a new column
                 self.raw_data.to_sql("raw_data", con=conn, if_exists="append", index=True)
+                success = True
             except:
+                success = False
+
+        if not success:
+            with db.engine.begin() as conn:
                 data = pd.read_sql(text("""SELECT * FROM public.raw_data"""), conn)
                 data = pd.concat([data, self.raw_data])
-                data.to_sql(name='sql_table', con=conn, if_exists='replace', index=False)
+                data.to_sql(name='raw_data', con=conn, if_exists='replace', index=False)
+
         return None
 
     def append_macro_econ_data(self):
@@ -197,9 +203,9 @@ class TrainingData(BaseModel):
         self.append_macro_econ_data()
         self.append_short_interest()
         self.append_fluctuations()
-        # self.append_news_sentiment()
-        # self.append_dte()
-        # self.append_options_data()
+        self.append_news_sentiment()
+        self.append_dte()
+        self.append_options_data()
         return None
 
     def append_news_sentiment(self):
