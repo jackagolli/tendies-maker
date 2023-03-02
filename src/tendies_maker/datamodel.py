@@ -1,19 +1,24 @@
 import datetime
+from email.message import EmailMessage
+import io
 import os
 from pathlib import Path
-import time
 import requests
+import smtplib
+import time
 
 from alpaca.data import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
+import boto3
 import bs4
 import dotenv
 import nltk
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 import pandas as pd
+import pandas_datareader as pdr
 from pydantic import BaseModel
-from sqlalchemy import create_engine
+from sqlalchemy import text
 from ta.momentum import RSIIndicator
 from ta.trend import SMAIndicator, EMAIndicator, MACD, IchimokuIndicator
 from ta.volatility import BollingerBands
@@ -22,6 +27,9 @@ from tqdm import tqdm
 
 from src.tendies_maker.utils import pct_to_numeric
 from src.tendies_maker.gather import gather_DTE, get_put_call_magnitude, get_call_put_ratio
+from src.tendies_maker.db import DB
+
+db = DB()
 
 
 class TrainingData(BaseModel):
@@ -127,19 +135,77 @@ class TrainingData(BaseModel):
         bars = stock_client.get_stock_bars(request_params)
         return bars.df
 
-    def append_all(self):
-        self.append_ta()
-        self.append_short_interest()
-        self.append_news_sentiment()
-        self.append_dte()
-        self.append_fluctuations()
-        self.append_options_data()
+    @staticmethod
+    def email_report():
+
+        sql = """select * from public.raw_data rd where date_trunc('day', rd."Date") =  date_trunc('day', now())"""
+        with db.engine.begin() as conn:
+            data = pd.read_sql(text(sql), conn, index_col='Symbol')
+            date = data['Date'].dt.to_pydatetime()[0].strftime("%m-%d-%Y")
+            data.drop(columns=['Date'], inplace=True)
+        s3 = boto3.resource('s3',
+                            aws_access_key_id=os.environ['ACCESS_KEY'],
+                            aws_secret_access_key=os.environ['SECRET_KEY'])
+        bucket = s3.Bucket('tendies-maker')
+        csv_buffer = io.StringIO()
+        data.to_csv(csv_buffer)
+        filename = f'data-{date}.csv'
+        bucket.put_object(Key=filename, Body=csv_buffer.getvalue())
+
+        sender_email = "jagolli192@gmail.com"
+        password = "ctsrqmdfykolpeoy"
+
+        msg = EmailMessage()
+        msg['From'] = "jagolli192@gmail.com"
+        msg['To'] = ', '.join(["jagolli192@gmail.com", "rhehdgus10@gmail.com"])
+        msg['Subject'] = 'TendiesMaker Daily Report'
+
+        msg.add_attachment(csv_buffer.getvalue(), filename=filename)
+
+        # Create secure connection with server and send email
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(sender_email, password)
+            server.send_message(msg)
+
         return None
 
     def write_data(self):
-        engine = create_engine(os.environ["SQLALCHEMY_DATABASE_URI"], echo=True)
         self.raw_data['Date'] = self.date
-        self.raw_data.to_sql("raw_data", con=engine, if_exists="append", index=True)
+        with db.engine.begin() as conn:
+            try:
+                # this will fail if there is a new column
+                self.raw_data.to_sql("raw_data", con=conn, if_exists="append", index=True)
+                success = True
+            except:
+                success = False
+
+        if not success:
+            with db.engine.begin() as conn:
+                data = pd.read_sql(text("""SELECT * FROM public.raw_data"""), conn)
+                data = pd.concat([data, self.raw_data])
+                data.to_sql(name='raw_data', con=conn, if_exists='replace', index=False)
+
+        return None
+
+    def append_macro_econ_data(self):
+        today = datetime.datetime.today()
+        labels = {'PCE': 'PCE', 'UNRATE': 'Unemployment', 'MICH': 'Inflation Expectation', 'JTSJOL': 'Job Openings'}
+        inflation = pdr.data.DataReader(list(labels.keys()), 'fred', today - datetime.timedelta(
+            days=180), today)
+        inflation = inflation.apply(lambda x: x.shift(x.isnull().sum()), axis=0)
+        inflation.rename(columns=labels, inplace=True)
+        records = inflation.pct_change().iloc[-1:].to_dict('records')[0]
+        self.raw_data = self.raw_data.assign(**records)
+        return None
+
+    def append_all(self):
+        self.append_ta()
+        self.append_macro_econ_data()
+        self.append_short_interest()
+        self.append_fluctuations()
+        self.append_news_sentiment()
+        self.append_dte()
+        self.append_options_data()
         return None
 
     def append_news_sentiment(self):

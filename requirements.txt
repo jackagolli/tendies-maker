@@ -1,4 +1,5 @@
 alpaca-py~=0.7.1
+boto3~=1.26.81
 beautifulsoup4~=4.11.2
 matplotlib~=3.7.0
 nltk~=3.6.1
@@ -18,3 +19,6 @@ setuptools~=65.5.1
 ta~=0.10.2
 tqdm~=4.60.0
 loguru~=0.6.0
+psycopg2~=2.9.5
+regex~=2022.10.31
+pandas-datareader~=0.10.0
