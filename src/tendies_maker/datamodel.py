@@ -12,6 +12,7 @@ from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 import boto3
 import bs4
+import dateutil.parser
 import dotenv
 import nltk
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
@@ -68,7 +69,25 @@ class TrainingData(BaseModel):
         df = df[~df["Rank"].str.contains("Close Ad")]
         df["24h"] = pct_to_numeric(df["24h"])
         df.set_index("Symbol", inplace=True)
+        df.drop(columns=["Rank"], inplace=True)
         return df.index.tolist(), df
+
+    @staticmethod
+    def scrape_fomc_calendar():
+        response = requests.get('https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm')
+        html = bs4.BeautifulSoup(response.text, "html.parser")
+        latest_year = html.find('div', {'class': 'panel panel-default'})
+        year = latest_year.a.text.split()[0]
+        day_results = [div.text.rstrip('*').split('-')[0] for div in
+                       latest_year.findAll('div', {'class': 'fomc-meeting__date'})]
+        month_results = [div.text.rstrip('*').split('/')[0] for div in
+                         latest_year.findAll('div', {'class': 'fomc-meeting__month'})]
+
+        upcoming_dates = [dateutil.parser.parse(f'{month} {day} {year}') for month, day in
+                          zip(month_results, day_results) if dateutil.parser.parse(f'{month} {day} {year}') >
+                          datetime.datetime.today()]
+
+        return upcoming_dates
 
     @staticmethod
     def scrape_news_sentiment(tickers):
@@ -137,7 +156,6 @@ class TrainingData(BaseModel):
 
     @staticmethod
     def email_report():
-
         sql = """select * from public.raw_data rd where date_trunc('day', rd."Date") =  date_trunc('day', now())"""
         with db.engine.begin() as conn:
             data = pd.read_sql(text(sql), conn, index_col='Symbol')
@@ -187,6 +205,12 @@ class TrainingData(BaseModel):
 
         return None
 
+    def append_days_to_fomc(self):
+        next_fomc_date = self.scrape_fomc_calendar()[0]
+        self.raw_data['Days to FOMC'] = (next_fomc_date - self.date).days
+
+        return None
+
     def append_macro_econ_data(self):
         today = datetime.datetime.today()
         labels = {'PCE': 'PCE', 'UNRATE': 'Unemployment', 'MICH': 'Inflation Expectation', 'JTSJOL': 'Job Openings'}
@@ -201,6 +225,7 @@ class TrainingData(BaseModel):
     def append_all(self):
         self.append_ta()
         self.append_macro_econ_data()
+        self.append_days_to_fomc()
         self.append_short_interest()
         self.append_fluctuations()
         self.append_news_sentiment()
