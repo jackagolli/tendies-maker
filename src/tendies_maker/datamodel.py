@@ -152,8 +152,8 @@ class TrainingData(BaseModel):
         filename = f'data-{date}.csv'
         bucket.put_object(Key=filename, Body=csv_buffer.getvalue())
 
-        sender_email = "jagolli192@gmail.com"
-        password = "ctsrqmdfykolpeoy"
+        sender_email = os.environ['FROM_EMAIL']
+        password = os.environ['EMAIL_SECRET']
 
         msg = EmailMessage()
         msg['From'] = "jagolli192@gmail.com"
