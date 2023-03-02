@@ -196,10 +196,10 @@ class TrainingData(BaseModel):
         self.append_ta()
         self.append_macro_econ_data()
         self.append_short_interest()
-        self.append_news_sentiment()
-        self.append_dte()
         self.append_fluctuations()
-        self.append_options_data()
+        # self.append_news_sentiment()
+        # self.append_dte()
+        # self.append_options_data()
         return None
 
     def append_news_sentiment(self):
