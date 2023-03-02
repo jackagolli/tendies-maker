@@ -25,3 +25,5 @@ jobs:
           SQLALCHEMY_DATABASE_URI: ${{ vars.SQLALCHEMY_DATABASE_URI }}
           ACCESS_KEY: ${{ secrets.ACCESS_KEY }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          EMAIL_SECRET: ${{ secrets.EMAIL_SECRET }}
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
