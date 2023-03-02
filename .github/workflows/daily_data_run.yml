@@ -23,3 +23,5 @@ jobs:
           ALPACA_API_KEY: ${{ vars.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ vars.ALPACA_SECRET_KEY }}
           SQLALCHEMY_DATABASE_URI: ${{ vars.SQLALCHEMY_DATABASE_URI }}
+          ACCESS_KEY: ${{ secrets.ACCESS_KEY }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
