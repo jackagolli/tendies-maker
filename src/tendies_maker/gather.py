@@ -7,6 +7,7 @@ import re
 import multiprocessing as mp
 from datetime import date, timezone
 from pathlib import Path
+import pytz
 from urllib.request import urlopen, Request
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 import nltk
@@ -128,7 +129,8 @@ def gather_DTE(tickers):
         dates = yf_ticker.earnings_dates
         delta = 0
         if dates is not None:
-            future_dates = [x for x in dates.index.to_pydatetime().tolist() if x > datetime.datetime.now(timezone.utc)]
+            future_dates = [x for x in dates.index.to_pydatetime().tolist() if x > datetime.datetime.now(
+                pytz.timezone('America/New_York'))]
             if future_dates:
                 next_date = future_dates[-1].date()
                 delta = next_date - date.today()
