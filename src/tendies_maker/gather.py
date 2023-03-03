@@ -123,19 +123,20 @@ def gather_multi(syms, **kwargs):
 
 def gather_DTE(tickers):
     df = pd.DataFrame(index=tickers, columns=['DTE'])
+    i = 0
 
     for ticker in tqdm(tickers):
         yf_ticker = yf.Ticker(ticker)
         dates = yf_ticker.earnings_dates
         delta = 0
         if dates is not None:
-            future_dates = [x for x in dates.index.to_pydatetime().tolist() if x > datetime.datetime.now(
-                pytz.timezone('America/New_York'))]
+            future_dates = [x for x in dates.index.tz_localize(None).to_pydatetime().tolist() if
+                            x > datetime.datetime.now()]
             if future_dates:
                 next_date = future_dates[-1].date()
                 delta = next_date - date.today()
                 delta = int(delta.days)
-
+        i+=1
         df.loc[ticker, 'DTE'] = delta
 
     return df
