@@ -156,14 +156,14 @@ class TrainingData(BaseModel):
         )
         bars = stock_client.get_stock_bars(request_params)
         return bars.df
+
     @staticmethod
     def query_all_data():
         sql = """select * from public.raw_data rd"""
         with db.engine.begin() as conn:
             data = pd.read_sql(text(sql), conn, index_col='Symbol')
-            date = data['Date'].dt.to_pydatetime()[0].strftime("%m-%d-%Y")
-            data.drop(columns=['Date'], inplace=True)
-        return data,date
+        return data
+
     @staticmethod
     def email_report():
         sql = """select * from public.raw_data rd where date_trunc('day', rd."Date") =  date_trunc('day', now())"""
@@ -273,15 +273,15 @@ class TrainingData(BaseModel):
         self.price_history = pd.concat([self.price_history, RSIIndicator(close=self.price_history["close"], window=14,
                                                                          fillna=False).rsi()], axis=1)
 
-        # for window in sma_windows:
-        #     self.price_history = pd.concat(
-        #         [self.price_history, SMAIndicator(close=self.price_history["close"], window=window,
-        #                                           fillna=False).sma_indicator()], axis=1)
-        #
-        # for window in ema_windows:
-        #     self.price_history = pd.concat(
-        #         [self.price_history, EMAIndicator(close=self.price_history["close"], window=window,
-        #                                           fillna=False).ema_indicator()], axis=1)
+        for window in sma_windows:
+            self.price_history = pd.concat(
+                [self.price_history, SMAIndicator(close=self.price_history["close"], window=window,
+                                                  fillna=False).sma_indicator()], axis=1)
+
+        for window in ema_windows:
+            self.price_history = pd.concat(
+                [self.price_history, EMAIndicator(close=self.price_history["close"], window=window,
+                                                  fillna=False).ema_indicator()], axis=1)
 
         self.price_history = pd.concat([self.price_history, BollingerBands(close=self.price_history["close"], window=20,
                                                                            window_dev=2).bollinger_pband()], axis=1)
@@ -319,7 +319,7 @@ class TrainingData(BaseModel):
 
         self.raw_data['Daily Change (Open to Close)'] = self.price_history['day_change'].groupby(level=0).tail(
             1).droplevel(1)
-        self.raw_data['Daily Change (Close to Close)'] = self.price_history['change_since_close'].diff().groupby(
+        self.raw_data['Daily Change (Close to Close)'] = self.price_history['change_since_close'].groupby(
             level=0).tail(
             1).droplevel(1)
 
