@@ -165,12 +165,13 @@ class TrainingData(BaseModel):
         return data
 
     @staticmethod
-    def email_report():
-        sql = """select * from public.raw_data rd where date_trunc('day', rd."Date") =  date_trunc('day', now())"""
-        with db.engine.begin() as conn:
-            data = pd.read_sql(text(sql), conn, index_col='Symbol')
-            date = data['Date'].dt.to_pydatetime()[0].strftime("%m-%d-%Y")
-            data.drop(columns=['Date'], inplace=True)
+    def email_report(data=None):
+        if data is None:
+            sql = """select * from public.raw_data rd where date_trunc('day', rd."Date") =  date_trunc('day', now())"""
+            with db.engine.begin() as conn:
+                data = pd.read_sql(text(sql), conn, index_col='Symbol')
+                date = data['Date'].dt.to_pydatetime()[0].strftime("%m-%d-%Y")
+                data.drop(columns=['Date'], inplace=True)
         s3 = boto3.resource('s3',
                             aws_access_key_id=os.environ['ACCESS_KEY'],
                             aws_secret_access_key=os.environ['SECRET_KEY'])
