@@ -12,28 +12,10 @@ install, or any desired package manager.
 pip install -r requirements.txt
 ```
 
-If using conda,
-```bash
-conda install --file requirements.txt
-```
-
 ## Usage
 Make sure to set desired data directory in header of files.
 ### Gathering data
-Run within virtual environment, conda environment, or using any Python installation with 
-required libraries. Get commands help using -h
-```python
-python generate_data.py -h
-```
-
-Sample command to generate all data
-```bash
-python generate_data.py -wsb -shorts -indicators -news -earnings -changes -options
-```
-Use overwrite argument to not be prompted during each edit to data file and overwrite all
-```bash
--overwrite
-```
+TrainingData object is used to gather data from various sources. 
 * **wsb** - Scrapes r/wallstreetbets via https://stocks.comment.ai/ to track mentions of 
 tickers and sentiment.
 * **shorts** - Scrapes https://www.highshortinterest.com/ to find most shorted stocks
@@ -47,38 +29,8 @@ tickers and sentiment.
 * **changes** - pulls data on largest change in past month and how many days since then
 * **options** - pulls options data and calculates put-call ratio (volume) and then value ratio of puts to calls
 
-### Preprocessing
-#### Results
-Getting results after market close, will essentially return a 0 or 1 if stock was a buy that day. Do this before normalizing data.
-```python
-python prepare_data.py -results
-```
-#### Normalization
-Two options available
-- [min_max](https://en.wikipedia.org/wiki/Feature_scaling)
-- [standard](https://en.wikipedia.org/wiki/Standard_score)
-```python
-python prepare_data.py -normalize min_max
-```
-
 ### portfolio.py
 This has code inside to optimize for maximum Sharpe Ratio given a list of tickers. Also has some commented
 code useful for getting options chain for tickers. This file is less user friendly and cannot be run with arguments
 ### ML
-Either train from completed existing dataset with outputs for each row, or predict based on current live data. 
-Set runtype to "train" if training with completed dataset, or "predict" if predicting live data. Set model_source to 
-"train" if training model from scratch. Otherwise set model_source to "load"
-
-## Contributing
-Pull as needed, branch the code if making any changes. Also try to keep track of tasks with issues.
-
-## License
-[MIT](https://choosealicense.com/licenses/mit/)
-
-## Requirements
-
-- [pandas](https://pandas.pydata.org/) - Python data analysis library
-- [numpy](https://numpy.org/doc/stable/) - Scientific computing package
-- [vader nltk](https://www.nltk.org/_modules/nltk/sentiment/vader.html) - Hutto, C.J. & Gilbert, E.E. (2014). VADER: A Parsimonious Rule-based Model for
-Sentiment Analysis of Social Media Text. Eighth International Conference on
-Weblogs and Social Media (ICWSM-14). Ann Arbor, MI, June 2014.
+TBA
