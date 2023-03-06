@@ -161,7 +161,7 @@ class TrainingData(BaseModel):
     def query_all_data():
         sql = """select * from public.raw_data rd"""
         with db.engine.begin() as conn:
-            data = pd.read_sql(text(sql), conn, index_col='Symbol')
+            data = pd.read_sql(text(sql), conn)
         return data
 
     @staticmethod
