@@ -52,10 +52,13 @@ class TrainingData(BaseModel):
         if os.path.isfile(dotenv_file):
             dotenv.load_dotenv(dotenv_file)
 
-        tickers, df = self.scrape_wsb_tickers()
-        price_history = self.get_price_history(tickers)
-        data["tickers"] = tickers
-        data["raw_data"] = df
+        wsb_tickers, df = self.scrape_wsb_tickers()
+        if "tickers" not in data.keys():
+            data["tickers"] = wsb_tickers
+            data["raw_data"] = df
+        else:
+            data["raw_data"] = pd.DataFrame(index=data["tickers"])
+        price_history = self.get_price_history(data["tickers"])
         data["price_history"] = price_history
         super().__init__(**data)
 
@@ -153,7 +156,14 @@ class TrainingData(BaseModel):
         )
         bars = stock_client.get_stock_bars(request_params)
         return bars.df
-
+    @staticmethod
+    def query_all_data():
+        sql = """select * from public.raw_data rd"""
+        with db.engine.begin() as conn:
+            data = pd.read_sql(text(sql), conn, index_col='Symbol')
+            date = data['Date'].dt.to_pydatetime()[0].strftime("%m-%d-%Y")
+            data.drop(columns=['Date'], inplace=True)
+        return data,date
     @staticmethod
     def email_report():
         sql = """select * from public.raw_data rd where date_trunc('day', rd."Date") =  date_trunc('day', now())"""
