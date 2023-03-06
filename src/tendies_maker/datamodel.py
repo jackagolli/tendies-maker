@@ -319,10 +319,9 @@ class TrainingData(BaseModel):
             'close'].shift(1)
 
         self.raw_data['Daily Change (Open to Close)'] = self.price_history['day_change'].groupby(level=0).tail(
-            1).droplevel(1)
+            1).droplevel(1).fillna(0)
         self.raw_data['Daily Change (Close to Close)'] = self.price_history['change_since_close'].groupby(
-            level=0).tail(
-            1).droplevel(1)
+            level=0).tail(1).droplevel(1).fillna(0)
 
         one_month_history = self.price_history[self.price_history.index.get_level_values(1).date >
                                                (datetime.date.today() - datetime.timedelta(days=self.tgt_days))]
@@ -339,7 +338,7 @@ class TrainingData(BaseModel):
         df.fillna(0, inplace=True)
 
         self.raw_data = self.raw_data.merge(df, how="left", left_index=True, right_index=True)
-
+        self.raw_data.fillna(0, inplace=True)
         return None
 
     def append_options_data(self):
