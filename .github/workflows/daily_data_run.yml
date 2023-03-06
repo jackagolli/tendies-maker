@@ -1,7 +1,7 @@
 name: daily data run
 on:
   schedule:
-    - cron: "0 23 * * MON,TUE,WED,THU,FRI,SUN" # run at 11pm UTC every weekday
+    - cron: "0 23 * * MON,TUE,WED,THU,FRI" # run at 11pm UTC every weekday
   workflow_dispatch: # allow manual trigger
 jobs:
   build:

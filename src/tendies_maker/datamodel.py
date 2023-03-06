@@ -165,8 +165,8 @@ class TrainingData(BaseModel):
         return data
 
     @staticmethod
-    def email_report(data=None):
-        if data is None:
+    def email_report(data=None, date=None):
+        if data is None and date is None:
             sql = """select * from public.raw_data rd where date_trunc('day', rd."Date") =  date_trunc('day', now())"""
             with db.engine.begin() as conn:
                 data = pd.read_sql(text(sql), conn, index_col='Symbol')
