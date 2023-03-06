@@ -310,6 +310,19 @@ class TrainingData(BaseModel):
         # Max intraday change since tgt_days
         self.price_history['intraday'] = (self.price_history['high'] - self.price_history['open']) / \
                                          self.price_history['open']
+
+        self.price_history['day_change'] = (self.price_history['close'] - self.price_history['open']) / \
+                                           self.price_history['open']
+
+        self.price_history['change_since_close'] = self.price_history['close'].diff() / self.price_history[
+            'close'].shift(1)
+
+        self.raw_data['Daily Change (Open to Close)'] = self.price_history['day_change'].groupby(level=0).tail(
+            1).droplevel(1)
+        self.raw_data['Daily Change (Close to Close)'] = self.price_history['change_since_close'].diff().groupby(
+            level=0).tail(
+            1).droplevel(1)
+
         one_month_history = self.price_history[self.price_history.index.get_level_values(1).date >
                                                (datetime.date.today() - datetime.timedelta(days=self.tgt_days))]
         df = one_month_history[['intraday']].max(level=0).rename(
