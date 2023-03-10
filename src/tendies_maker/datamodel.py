@@ -167,7 +167,10 @@ class TrainingData(BaseModel):
     @staticmethod
     def email_report(data=None, date=None):
         if data is None and date is None:
-            sql = """select * from public.raw_data rd where date_trunc('day', rd."Date") =  date_trunc('day', now())"""
+            sql = """
+            select * from public.raw_data rd inner join
+            (select max("Date") as date from raw_data) md on rd."Date" = md.date
+            """
             with db.engine.begin() as conn:
                 data = pd.read_sql(text(sql), conn, index_col='Symbol')
                 date = data['Date'].dt.to_pydatetime()[0].strftime("%m-%d-%Y")
