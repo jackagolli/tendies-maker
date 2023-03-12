@@ -150,6 +150,10 @@ def gather_single_prices(ticker, period="1mo"):
     return data
 
 
+def get_options_stats(tickers):
+
+
+
 def get_call_put_ratio(tickers):
     df = pd.DataFrame(index=tickers, columns=['Put Call Volume Ratio'])
     for ticker in tqdm(tickers):
