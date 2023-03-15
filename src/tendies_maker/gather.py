@@ -180,8 +180,8 @@ def get_options_stats(tickers, today, write_to_file=False):
             call_open_interest = call_data['openInterest'].sum()
             put_open_interest = put_data['openInterest'].sum()
 
-            call_iv = call_data['impliedVolatility'].sum()
-            put_iv = call_data['impliedVolatility'].sum()
+            call_iv = call_data['impliedVolatility'].mean()
+            put_iv = call_data['impliedVolatility'].mean()
 
             volume_ratio = put_volume / call_volume
             open_interest_ratio = put_open_interest / call_open_interest
@@ -192,11 +192,23 @@ def get_options_stats(tickers, today, write_to_file=False):
             call_open_interest_weight = call_data['openInterest'] / call_open_interest
             put_open_interest_weight = put_data['openInterest'] / put_open_interest
 
-            weighted_avg_call_vol = np.average(call_data['strike'], weights=call_volume_weight)
-            weighted_avg_put_vol = np.average(put_data['strike'], weights=put_volume_weight)
+            if call_volume > 0:
+                weighted_avg_call_vol = np.average(call_data['strike'], weights=call_volume_weight)
+            else:
+                weighted_avg_call_vol = 0
+            if put_volume > 0:
+                weighted_avg_put_vol = np.average(put_data['strike'], weights=put_volume_weight)
+            else:
+                weighted_avg_put_vol = 0
 
-            weighted_avg_call_oi = np.average(call_data['strike'], weights=call_open_interest_weight)
-            weighted_avg_put_oi = np.average(put_data['strike'], weights=put_open_interest_weight)
+            if call_open_interest > 0:
+                weighted_avg_call_oi = np.average(call_data['strike'], weights=call_open_interest_weight)
+            else:
+                weighted_avg_call_oi = 0
+            if put_open_interest > 0:
+                weighted_avg_put_oi = np.average(put_data['strike'], weights=put_open_interest_weight)
+            else:
+                weighted_avg_put_oi = 0
 
             current_data_lst = [current_date, days_left, call_volume, put_volume, call_open_interest,
                                 put_open_interest, call_iv, put_iv, volume_ratio, open_interest_ratio,
@@ -206,7 +218,7 @@ def get_options_stats(tickers, today, write_to_file=False):
             data_lst.append(current_data_lst)
 
         data_df = pd.DataFrame(data_lst, columns=data_col)
-        data_file_dir = Path(__file__).parent.parent.parent/'data'
+        data_file_dir = Path(__file__).parent.parent.parent.parent/'Shoop Magic'
         data_time = today.strftime('%Y-%m-%d')
         if write_to_file:
             try:
