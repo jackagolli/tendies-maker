@@ -7,9 +7,6 @@ import requests
 import smtplib
 import time
 
-from alpaca.data import StockHistoricalDataClient
-from alpaca.data.requests import StockBarsRequest
-from alpaca.data.timeframe import TimeFrame
 import boto3
 import bs4
 import dateutil.parser
@@ -27,7 +24,7 @@ from ta.volume import MFIIndicator
 from tqdm import tqdm
 
 from src.tendies_maker.utils import pct_to_numeric
-from src.tendies_maker.gather import gather_DTE, get_put_call_magnitude, get_call_put_ratio
+from src.tendies_maker.gather import gather_DTE, get_put_call_magnitude, get_call_put_ratio, get_price_history
 from src.tendies_maker.db import DB
 
 db = DB()
@@ -58,7 +55,7 @@ class TrainingData(BaseModel):
             data["raw_data"] = df
         else:
             data["raw_data"] = pd.DataFrame(index=data["tickers"])
-        price_history = self.get_price_history(data["tickers"])
+        price_history = gather.get_price_history(data["tickers"])
         data["price_history"] = price_history
         super().__init__(**data)
 
@@ -144,18 +141,6 @@ class TrainingData(BaseModel):
         df.fillna(0, inplace=True)
 
         return df
-
-    @staticmethod
-    def get_price_history(tickers):
-        stock_client = StockHistoricalDataClient(os.environ["ALPACA_API_KEY"], os.environ["ALPACA_SECRET_KEY"])
-        start_date = datetime.datetime.today() - datetime.timedelta(days=180)
-        request_params = StockBarsRequest(
-            symbol_or_symbols=tickers,
-            timeframe=TimeFrame.Day,
-            start=start_date
-        )
-        bars = stock_client.get_stock_bars(request_params)
-        return bars.df
 
     @staticmethod
     def query_all_data():

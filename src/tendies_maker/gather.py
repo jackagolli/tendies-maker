@@ -1,24 +1,39 @@
-import yfinance as yf
-import pandas as pd
-import numpy as np
-import datetime
-import requests
+import os
 import re
-import multiprocessing as mp
-from datetime import date, timezone
-from pathlib import Path
-import pytz
+import requests
 from urllib.request import urlopen, Request
+
+from alpaca.data import StockHistoricalDataClient
+from alpaca.data.requests import StockBarsRequest
+from alpaca.data.timeframe import TimeFrame
+from bs4 import BeautifulSoup
+import datetime
+from datetime import date
+import multiprocessing as mp
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 import nltk
-from bs4 import BeautifulSoup
+import numpy as np
+from pathlib import Path
+import pandas as pd
 from tqdm import tqdm
+import yfinance as yf
 
 from src.tendies_maker.db import DB
 
 num_proc = mp.cpu_count() - 1
 db = DB()
 
+
+def get_price_history(tickers):
+    stock_client = StockHistoricalDataClient(os.environ["ALPACA_API_KEY"], os.environ["ALPACA_SECRET_KEY"])
+    start_date = datetime.datetime.today() - datetime.timedelta(days=180)
+    request_params = StockBarsRequest(
+        symbol_or_symbols=tickers,
+        timeframe=TimeFrame.Day,
+        start=start_date
+    )
+    bars = stock_client.get_stock_bars(request_params)
+    return bars.df
 
 
 def gather_stock_data(tickers, time_span, interval):
@@ -154,7 +169,6 @@ def gather_single_prices(ticker, period="1mo"):
 
 
 def get_options_stats(tickers, today, write_to_file=False):
-
     data_col = ['Exp Date', 'Days Left', 'Call Volume', 'Put Volume', 'Call Open Interest', 'Put Open Interest',
                 'Call IV', 'Put IV', 'Volume Ratio', 'Open Interest Ratio',
                 'Vol Weighted Avg Call Price', 'Vol Weighted Avg Put Price',
@@ -218,7 +232,7 @@ def get_options_stats(tickers, today, write_to_file=False):
             data_lst.append(current_data_lst)
 
         data_df = pd.DataFrame(data_lst, columns=data_col)
-        data_file_dir = Path(__file__).parent.parent.parent.parent/'Shoop Magic'
+        data_file_dir = Path(__file__).parent.parent.parent.parent / 'Shoop Magic'
         data_time = today.strftime('%Y-%m-%d')
         if write_to_file:
             try:
