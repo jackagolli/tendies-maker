@@ -24,7 +24,7 @@ from ta.volume import MFIIndicator
 from tqdm import tqdm
 
 from src.tendies_maker.utils import pct_to_numeric
-from src.tendies_maker.gather import gather_DTE, get_put_call_magnitude, get_call_put_ratio, get_price_history
+from src.tendies_maker.gather import gather_dte, get_put_call_magnitude, get_call_put_ratio, get_price_history
 from src.tendies_maker.db import DB
 
 db = DB()
@@ -292,7 +292,7 @@ class TrainingData(BaseModel):
         return None
 
     def append_dte(self):
-        dte = gather_DTE(self.tickers)
+        dte = gather_dte(self.tickers)
         self.raw_data = self.raw_data.merge(dte, how="left", left_index=True, right_index=True)
 
     def append_fluctuations(self):

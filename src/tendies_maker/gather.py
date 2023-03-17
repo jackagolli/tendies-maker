@@ -36,84 +36,6 @@ def get_price_history(tickers):
     return bars.df
 
 
-def gather_stock_data(tickers, time_span, interval):
-    """
-    This will be deprecated
-
-    :param tickers:
-    :param time_span:
-    :param interval:
-    :return:
-    """
-    data_dict = {}
-
-    for ticker in tickers:
-        data_dict[ticker] = {}
-        data_dict[ticker]["monthly"] = {}
-        data_dict[ticker]["weekly"] = {}
-        data_dict[ticker]["daily"] = {}
-        company = yf.Ticker(ticker)
-        data = company.history(period=time_span, interval=interval)
-        data_dict[ticker]["start_price"] = data["Close"][0]
-        data_dict[ticker]["end_price"] = data["Close"][-1]
-        daily_close = data['Close']
-        data_dict[ticker]['daily']['close'] = daily_close
-        daily_pct_change = daily_close.pct_change()
-        cum_daily_return = ((1 + daily_pct_change).cumprod() - 1) * 100
-        weekly = data.resample('W-Mon').mean()
-        weekly_pct_change = weekly['Close'].pct_change()
-        monthly = data.resample('M').mean()
-        monthly_pct_change = monthly['Close'].pct_change()
-
-        data_dict[ticker]["daily"]['pct_change'] = daily_pct_change
-        data_dict[ticker]["daily"]["cum_return"] = cum_daily_return
-        data_dict[ticker]["daily"]['mean'] = daily_pct_change.describe()["mean"]
-        data_dict[ticker]["daily"]['std'] = daily_pct_change.describe()["std"]
-
-        data_dict[ticker]["weekly"]['close'] = weekly['Close']
-        data_dict[ticker]["weekly"]['pct_change'] = weekly_pct_change
-        data_dict[ticker]["weekly"]['mean'] = weekly_pct_change.describe()["mean"]
-        data_dict[ticker]["weekly"]['std'] = weekly_pct_change.describe()["std"]
-
-        data_dict[ticker]['monthly']['close'] = monthly['Close']
-        data_dict[ticker]["monthly"]['pct_change'] = monthly_pct_change
-        data_dict[ticker]["monthly"]['mean'] = monthly_pct_change.describe()["mean"]
-        data_dict[ticker]["monthly"]['std'] = monthly_pct_change.describe()["std"]
-        data_dict[ticker]["monthly"]["cum_return"] = cum_daily_return.resample("M").mean()
-
-        # data = yf.download('AAPL','2016-01-01','2018-01-01')
-
-    return data_dict
-
-
-def gather_options_ticker(ticker, days_from_today, type):
-    """ data stored in yfinance.options:
-    ['contractSymbol', 'lastTradeDate', 'strike', 'lastPrice', 'bid', 'ask', 'change', 'percentChange', 'volume',
-    'openInterest', 'impliedVolatility', 'inTheMoney', 'contractSize', 'currency']
-    type = calls or puts
-
-    This will be deprecated
-    """
-    data_dict = {}
-    today = datetime.date.today()
-    days_from_today[:] = [today + datetime.timedelta(days=dt) for dt in days_from_today]
-    company = yf.Ticker(ticker)
-    available_opts = company.options
-
-    format_avail_opts = []
-    for date in available_opts:
-        format_avail_opts.append(datetime.datetime.strptime(date, "%Y-%m-%d").date())
-
-    matched_option_dates = [min(format_avail_opts, key=lambda x: abs(x - date)) for date in days_from_today]
-
-    if type == "calls":
-        for date in matched_option_dates:
-            date_str = date.strftime("%Y-%m-%d")
-            data_dict[date_str] = company.option_chain(date_str).calls
-
-    return data_dict
-
-
 def gather_multi(syms, **kwargs):
     """
     Gather stock data for multiple tickers
@@ -140,7 +62,7 @@ def gather_multi(syms, **kwargs):
     return df
 
 
-def gather_DTE(tickers):
+def gather_dte(tickers):
     df = pd.DataFrame(index=tickers, columns=['DTE'])
     i = 0
 
@@ -159,13 +81,6 @@ def gather_DTE(tickers):
         df.loc[ticker, 'DTE'] = delta
 
     return df
-
-
-def gather_single_prices(ticker, period="1mo"):
-    ticker = yf.Ticker(ticker)
-    data = ticker.history(period=period)
-
-    return data
 
 
 def get_options_stats(tickers, today, write_to_file=False):
@@ -365,38 +280,6 @@ def scrape_wsb(data_dir):
     return None
 
 
-def gather_short_interest(data_dir):
-    scraped_tables = pd.read_html('https://www.highshortinterest.com/', header=0)
-    df = scraped_tables[2]
-    df = df[~df['Ticker'].str.contains("google_ad_client", na=False)]
-    df = df.dropna()
-    # df = df.drop(columns=['Exchange'])
-    df = df.set_index('Ticker')
-    df.index.name = None
-    df = df[['ShortInt']]
-    df.columns = ['short_interest']
-
-    short_interest = df.short_interest.values
-    short_interest = short_interest.astype('str')
-    short_interest = np.char.strip(short_interest, chars='%')
-    short_interest = short_interest.astype(np.float32)
-    short_interest = short_interest / 100
-
-    df['short_interest'] = short_interest
-
-    return df
-
-
-def gather_wsb_tickers(data_dir, date_str):
-    try:
-        df = pd.read_csv(data_dir / ('wsb_sentiment_' + date_str + '.csv'), header=0)
-    except:
-        df = pd.read_csv(data_dir / ('data_' + date_str + '.csv'), header=0)
-    tickers = df.iloc[:, 0].tolist()
-
-    return tickers
-
-
 def gather_results(prices, tickers):
     change = pd.DataFrame(index=tickers, columns=['Y'])
 
@@ -427,58 +310,3 @@ def gather_results(prices, tickers):
 
     return change
 
-
-def scrape_news_sentiment(tickers=None):
-    # tickers = ['GME','AMC']
-    nltk.download('vader_lexicon')
-    df = pd.DataFrame(index=tickers, columns=['news_sentiment'])
-    base_url = 'https://finviz.com/quote.ashx?t='
-    news_tables = {}
-
-    for ticker in tickers:
-        url = base_url + ticker
-        try:
-            req = Request(url=url, headers={"User-Agent": "Chrome"})
-            response = urlopen(req)
-            html = BeautifulSoup(response, "html.parser")
-            news_table = html.find(id='news-table')
-        except:
-            news_table = ''
-        news_tables[ticker] = news_table
-
-    news_headlines = {}
-
-    for ticker, news_table in news_tables.items():
-        news_headlines[ticker] = []
-        dates = []
-        try:
-
-            for i in news_table.findAll('tr'):
-                # Strictly get more recent sentiment
-                if len(dates) == 4:
-                    break
-                text = i.a.get_text()
-                date_scrape = i.td.text.split()
-
-                if len(date_scrape) != 1:
-                    date = date_scrape[0]
-                    dates.append(date)
-
-                news_headlines[ticker].append(text)
-
-        except:
-            news_headlines[ticker].append('')
-
-    vader = SentimentIntensityAnalyzer()
-
-    for ticker, value in news_headlines.items():
-        # This is the avg score between -1 and 1 of the all the news headlines
-        news_df = pd.DataFrame(news_headlines[ticker], columns=['headline'])
-        scores = news_df['headline'].apply(vader.polarity_scores).tolist()
-        scores_df = pd.DataFrame(scores)
-        score = scores_df['compound'].mean()
-        df.loc[ticker, 'news_sentiment'] = score
-        # news_df = news_df.join(scores_df, rsuffix='_right')
-        # news_df['date'] = pd.to_datetime(news_df.date).dt.date
-
-    return df

@@ -110,7 +110,7 @@ if __name__ == '__main__':
         stocks.append_to_table(data_dir, data=news_sentiment, date_str=today, name="news sentiment", overwrite=bool)
 
     if args.earnings:
-        dte = stocks.gather_DTE(tickers)
+        dte = stocks.gather_dte(tickers)
         stocks.append_to_table(data_dir, dte, today, name="days to earnings", overwrite=bool)
 
     if args.changes:

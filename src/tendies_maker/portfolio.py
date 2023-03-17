@@ -1,4 +1,4 @@
-import stocks
+from src.tendies_maker import stocks
 import datetime as dt
 
 """ Sharpe ratio
