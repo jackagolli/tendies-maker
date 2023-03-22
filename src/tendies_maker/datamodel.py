@@ -55,7 +55,7 @@ class TrainingData(BaseModel):
             data["raw_data"] = df
         else:
             data["raw_data"] = pd.DataFrame(index=data["tickers"])
-        price_history = gather.get_price_history(data["tickers"])
+        price_history = get_price_history(data["tickers"])
         data["price_history"] = price_history
         super().__init__(**data)
 

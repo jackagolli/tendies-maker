@@ -24,9 +24,9 @@ num_proc = mp.cpu_count() - 1
 db = DB()
 
 
-def get_price_history(tickers):
+def get_price_history(tickers, delta=180):
     stock_client = StockHistoricalDataClient(os.environ["ALPACA_API_KEY"], os.environ["ALPACA_SECRET_KEY"])
-    start_date = datetime.datetime.today() - datetime.timedelta(days=180)
+    start_date = datetime.datetime.today() - datetime.timedelta(days=delta)
     request_params = StockBarsRequest(
         symbol_or_symbols=tickers,
         timeframe=TimeFrame.Day,
