@@ -22,6 +22,78 @@ from src.tendies_maker.db import DB
 
 num_proc = mp.cpu_count() - 1
 db = DB()
+params = {'apiKey': os.environ["POLYGON_API_KEY"]}
+
+
+def get_market_holidays():
+    full_url = 'https://api.polygon.io/v1/marketstatus/upcoming'
+    response = requests.get(full_url, params=params)
+
+    if response.status_code == 200:
+        data = response.json()
+        closed_dates = [entry['date'] for entry in data if entry['status'] == 'closed']
+        return list(set(closed_dates))
+    else:
+        return None
+
+
+def get_nearest_open_market_date(input_date_str):
+    input_date = datetime.datetime.strptime(input_date_str, '%Y-%m-%d').date()
+    closed_dates = get_market_holidays()
+
+    if closed_dates is None:
+        return None
+
+    while True:
+        # Advance to the next weekday if it's a weekend
+        while input_date.weekday() >= 5:
+            input_date += datetime.timedelta(days=1)
+
+        # Check if it's a market holiday
+        if input_date.strftime('%Y-%m-%d') not in closed_dates:
+            return input_date.strftime('%Y-%m-%d')
+
+        # Otherwise, go to the next day
+        input_date += datetime.timedelta(days=1)
+
+def get_options_chain(ticker, asof_date):
+    all_flattened_data = []
+
+    for expired in [False]:
+        # Generate the URL based on whether you want expired options or not
+        full_url = f"https://api.polygon.io/v3/reference/options/contracts?" \
+                   f"underlying_ticker={ticker}&expired={str(expired).lower()}&order=desc&limit=250&sort=" \
+                   f"expiration_date&as_of={asof_date}"
+
+        next_url = full_url  # Start with the first URL
+
+        while next_url:
+            response = requests.get(next_url, params=params)
+            if response.status_code == 200:
+                response_data = response.json()
+                data = response_data.get('results', [])
+
+                # Flatten the data
+                flattened_data = []
+                for record in data:
+                    flat_record = {}
+                    for key, value in record.items():
+                        if isinstance(value, dict):
+                            for sub_key, sub_value in value.items():
+                                flat_record[f"{key}_{sub_key}"] = sub_value
+                        else:
+                            flat_record[key] = value
+                    flattened_data.append(flat_record)
+
+                all_flattened_data.extend(flattened_data)
+
+                # Get the next URL for pagination, if available
+                next_url = response_data.get('next_url', None)
+            else:
+                print(f"Error: Received status code {response.status_code}")
+                break
+
+    return pd.DataFrame.from_records(all_flattened_data)
 
 
 def get_price_history(tickers, delta=180):
@@ -309,4 +381,3 @@ def gather_results(prices, tickers):
     change[change != 0] = 1
 
     return change
-
