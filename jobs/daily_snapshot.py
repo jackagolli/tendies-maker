@@ -28,10 +28,10 @@ final_data = price_history.iloc[-1:, :].copy()
 final_data.loc[:, 'news_score'] = score
 final_data.loc[:, 'news_confidence'] = confidence
 final_data.loc[:, 'days_to_fomc'] = days_to_fomc
-final_data.loc[:, 'max_intraday_change'] = max_changes['value_of_max_intraday'][ticker]
+final_data.loc[:, 'max_intraday_change_90d'] = max_changes['value_of_max_intraday'][ticker]
 final_data.loc[:, 'days_since_last_spike'] = max_changes['days_since_last_spike'][ticker]
-final_data.loc[:, 'put_call_volume_ratio'] = metrics['put_call_ratio']
-final_data.loc[:, 'weighted_avg_vwap'] = metrics['weighted_avg_vwap']
+final_data.loc[:, 'put_call_volume_ratio'] = metrics['put_call_volume_ratio']
+final_data.loc[:, 'weighted_avg_options_vwap'] = metrics['weighted_avg_vwap']
 
 econ = get_macro_econ_data()
 
