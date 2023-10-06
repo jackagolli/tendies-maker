@@ -66,7 +66,7 @@ class TrainingData(BaseModel):
         df = df[['#', 'Symbol', 'Mentions', '24h', 'Upvotes']]
         df.rename(columns={'#': 'Rank'}, inplace=True)
         df.dropna(inplace=True)
-        df = df[~df["Rank"].str.contains("Close Ad")]
+        df = df[~df['Rank'].apply(lambda x: isinstance(x, str) and "Close Ad" in x)]
         df["24h"] = pct_to_numeric(df["24h"])
         df.set_index("Symbol", inplace=True)
         df.drop(columns=["Rank"], inplace=True)
@@ -147,6 +147,44 @@ class TrainingData(BaseModel):
         sql = """select * from public.raw_data rd"""
         with db.engine.begin() as conn:
             data = pd.read_sql(text(sql), conn)
+        return data
+
+    def calculate_data(self):
+        data = self.query_all_data()
+        data['Date'] = pd.to_datetime(data['Date']).dt.normalize()
+
+        unique_tickers = data['Symbol'].unique().tolist()
+        price_history = get_price_history(unique_tickers).reset_index(names=['Symbol', 'Date'])
+        price_history['Date'] = price_history['Date'].dt.tz_localize(None).dt.normalize()
+
+        # Initialize 'Result' column to 'NO'
+        data['Result'] = 'NO'
+
+        # Parameters
+        window = 7
+        pct = 5.0
+
+        def check_price_increase(group):
+            ticker = group['Symbol'].iloc[0]
+            for idx, row in group.iterrows():
+                start_date = row['Date']
+                end_date = start_date + pd.Timedelta(days=window)
+
+                # Filter Alpaca data for this ticker within the window
+                mask = (price_history['Symbol'] == ticker) & (price_history['Date'] > start_date) & (
+                            price_history['Date'] <= end_date)
+                window_data = price_history[mask]
+
+                if not window_data.empty:
+                    start_price = window_data['close'].iloc[0]
+                    max_price = window_data['close'].max()
+
+                    # Check if the stock went up by the given percentage
+                    if max_price >= start_price * (1 + pct / 100):
+                        data.loc[idx, 'Result'] = 'YES'
+
+        # Apply the function to each group of rows with the same ticker
+        data.groupby('Symbol').apply(check_price_increase)
         return data
 
     @staticmethod

@@ -9,8 +9,178 @@ import multiprocessing as mp
 from pathlib import Path
 from datetime import date
 import datetime
+import math
+
 from sklearn.preprocessing import MinMaxScaler
-num_proc = mp.cpu_count() - 1
+from ta.momentum import RSIIndicator
+from ta.trend import SMAIndicator, EMAIndicator, MACD, IchimokuIndicator
+from ta.volatility import BollingerBands
+from ta.volume import MFIIndicator, VolumeWeightedAveragePrice
+from transformers import BertTokenizer, BertForSequenceClassification
+from transformers import pipeline
+
+num_proc = mp.cpu_count() - 2
+
+
+def news_sentiment_analysis(news):
+    model = BertForSequenceClassification.from_pretrained("ahmedrachid/FinancialBERT-Sentiment-Analysis", num_labels=3)
+    tokenizer = BertTokenizer.from_pretrained("ahmedrachid/FinancialBERT-Sentiment-Analysis")
+
+    nlp = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
+    total_sentiment_score = 0
+    total_confidence = 0
+    total_articles = 0
+    lambda_rate = 1e-6
+
+    # Sentiment Label mapping
+    sentiment_map = {
+        'positive': 1,
+        'neutral': 0,
+        'negative': -1
+    }
+
+    for _, article in news.iterrows():
+
+        title = article.get('title')
+        description = article.get('description')
+
+        if pd.isna(title) or pd.isna(description):
+            continue
+
+        description = description[:512]
+        published_time = datetime.datetime.fromisoformat(article['published_utc'].replace('Z', '+00:00'))
+        time_delta = (datetime.datetime.now(datetime.timezone.utc) - published_time).total_seconds()
+
+        # Time Decay Factor
+        decay_factor = math.exp(-lambda_rate * time_delta)
+
+        # Sentiment analysis
+        title_result = nlp(title)
+        description_result = nlp(description)
+
+        # Calculate the weighted sentiment and confidence scores
+        weighted_sentiment = (0.3 * sentiment_map[title_result[0]['label']] + 0.7 * sentiment_map[
+            description_result[0]['label']]) * decay_factor
+        weighted_confidence = (0.3 * title_result[0]['score'] + 0.7 * description_result[0]['score']) * decay_factor
+
+        total_sentiment_score += weighted_sentiment
+        total_confidence += weighted_confidence
+        total_articles += 1
+
+    average_sentiment = total_sentiment_score / total_articles if total_articles else 0
+    average_confidence = total_confidence / total_articles if total_articles else 0
+
+    return average_sentiment, average_confidence
+
+
+def append_technical_indicators(price_history, sma_windows=None, ema_windows=None):
+    if sma_windows is None:
+        sma_windows = [50]
+
+    if ema_windows is None:
+        ema_windows = [12, 26]
+
+    # EMA/SMA
+    # for window in sma_windows:
+    #     price_history = pd.concat(
+    #         [price_history, SMAIndicator(close=price_history["close"], window=window,
+    #                                      fillna=False).sma_indicator()], axis=1)
+    #
+    # for window in ema_windows:
+    #     price_history = pd.concat(
+    #         [price_history, EMAIndicator(close=price_history["close"], window=window,
+    #                                      fillna=False).ema_indicator()], axis=1)
+
+    price_history = pd.concat([price_history, RSIIndicator(close=price_history["close"], window=14,
+                                                           fillna=False).rsi()], axis=1)
+
+    price_history = pd.concat([price_history, BollingerBands(close=price_history["close"], window=20,
+                                                             window_dev=2).bollinger_pband()], axis=1)
+
+    price_history = pd.concat([price_history, MACD(close=price_history["close"]).macd()], axis=1)
+
+    ichi_ind = IchimokuIndicator(high=price_history["high"], low=price_history["low"])
+    price_history["ichi"] = ichi_ind.ichimoku_a() - ichi_ind.ichimoku_b()
+
+    price_history = pd.concat([price_history,
+                               MFIIndicator(high=price_history["high"],
+                                            low=price_history["low"],
+                                            close=price_history["close"],
+                                            volume=price_history["volume"]).money_flow_index()], axis=1)
+
+    return price_history
+
+
+def append_options_metrics(options_df):
+    # Filter puts and calls into their own DataFrames
+    puts_df = options_df[options_df['details_contract_type'] == 'put']
+    calls_df = options_df[options_df['details_contract_type'] == 'call']
+    put_call_ratio = len(puts_df) / len(calls_df) if len(calls_df) != 0 else 0
+
+    # Sum up the volumes for puts and calls
+    total_put_volume = puts_df['day_volume'].sum()
+    total_call_volume = calls_df['day_volume'].sum()
+
+    # Calculate the put-call volume ratio
+    put_call_volume_ratio = total_put_volume / total_call_volume if total_call_volume != 0 else 0
+
+    # Avoid division by zero by replacing zero deltas with NaN
+    options_df['theta_per_delta'] = options_df['greeks_theta'] / options_df['greeks_delta']
+    options_df.loc[options_df['greeks_delta'] == 0, 'theta_per_delta'] = 0
+    options_df['volume_to_open_interest'] = options_df['day_volume'] / options_df['open_interest']
+    options_df.loc[options_df['open_interest'] == 0, 'volume_to_open_interest'] = 0
+    # For call options
+    options_df.loc[options_df['details_contract_type'] == 'call', 'moneyness'] = \
+        options_df['day_close'] - options_df['details_strike_price']
+
+    # For put options
+    options_df.loc[options_df['details_contract_type'] == 'put', 'moneyness'] = \
+        options_df['details_strike_price'] - options_df['day_close']
+
+    # Assuming 'details_expiration_date' is in YYYY-MM-DD format and 'day_last_updated' is a timestamp in nanoseconds
+    options_df['details_expiration_date'] = pd.to_datetime(options_df['details_expiration_date'])
+    options_df['day_last_updated_date'] = pd.to_datetime(options_df['day_last_updated'], unit='ns')
+
+    # Calculate days to expiration
+    options_df['days_to_expiration'] = (
+            options_df['details_expiration_date'] - options_df['day_last_updated_date']).dt.days
+
+    weighted_avg_vwap = (options_df['day_vwap'] * options_df['day_volume']).sum() / options_df['day_volume'].sum()
+
+    metrics = {
+        'put_call_ratio': put_call_ratio,
+        'put_call_volume_ratio': put_call_volume_ratio,
+        'weighted_avg_vwap': weighted_avg_vwap,
+        'avg_vwap': options_df['day_vwap'].mean(),
+    }
+    return options_df, metrics
+
+
+def append_fluctuations(price_history):
+    # Max intraday change since tgt_days
+    price_history['intraday_change'] = (price_history['high'] - price_history['open']) / \
+                                price_history['open']
+
+    price_history['day_change'] = (price_history['close'] - price_history['open']) / price_history['open']
+
+    # Calculate max intraday change for each ticker (level 0)
+    # Find the date of the max intraday change for each ticker
+    date_of_max_intraday = price_history['intraday_change'].groupby(level=0).idxmax()
+
+    # Calculate days since the last max intraday change
+    today = datetime.date.today()
+    days_since_last_spike = {ticker: (today - pd.Timestamp(date).date()).days for ticker, (_, date) in
+                             date_of_max_intraday.items()}
+
+    # Also get the value of the last max intraday spike
+    value_of_max_intraday = {ticker: price_history.loc[idx, 'intraday_change'] for
+                             ticker, idx in date_of_max_intraday.items()}
+
+    results = {
+        'days_since_last_spike': days_since_last_spike,
+        'value_of_max_intraday': value_of_max_intraday
+    }
+    return price_history, results
 
 
 def thinker(ticker, date, stock_data, options_data, scenario, *args):
@@ -177,7 +347,7 @@ def calc_intraday_change(tickers, data):
     return data
 
 
-def calc_wsb_daily_change(data_dir,overwrite=False):
+def calc_wsb_daily_change(data_dir, overwrite=False):
     files = []
     today = date.today().strftime("%m-%d-%Y")
     print('Calculating change since previous file...')

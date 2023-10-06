@@ -1,7 +1,7 @@
 name: daily data run
 on:
   schedule:
-    - cron: "0 23 * * MON,TUE,WED,THU,FRI" # run at 11pm UTC every weekday
+    - cron: "0 13 * * MON,TUE,WED,THU,FRI"  # run at 1pm UTC (8am EST) every weekday
   workflow_dispatch: # allow manual trigger
 jobs:
   build:
@@ -18,7 +18,7 @@ jobs:
         run: |
           pip install -r requirements.txt
       - name: execute py script # run main.py
-        run: python -m jobs.generate_data
+        run: python -m jobs.daily_snapshot
         env:
           ALPACA_API_KEY: ${{ vars.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ vars.ALPACA_SECRET_KEY }}

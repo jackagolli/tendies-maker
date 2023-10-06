@@ -1,20 +1,17 @@
+from datetime import date
 import os
+from pathlib import Path
 import re
 import requests
-from urllib.request import urlopen, Request
 
 from alpaca.data import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
-from bs4 import BeautifulSoup
 import datetime
-from datetime import date
 import multiprocessing as mp
-from nltk.sentiment.vader import SentimentIntensityAnalyzer
-import nltk
 import numpy as np
-from pathlib import Path
 import pandas as pd
+import pandas_datareader as pdr
 from tqdm import tqdm
 import yfinance as yf
 
@@ -23,6 +20,42 @@ from src.tendies_maker.db import DB
 num_proc = mp.cpu_count() - 1
 db = DB()
 params = {'apiKey': os.environ["POLYGON_API_KEY"]}
+
+
+def get_macro_econ_data():
+    today = datetime.datetime.today()
+    labels = {'PCE': 'PCE',
+              'UNRATE': 'Unemployment',
+              'MICH': 'Inflation Expectation',
+              'JTSJOL': 'Job Openings',
+              'FEDFUNDS': 'Fed Funds Rate',
+              'M2REAL': 'Real M2',
+              'GDPC1': 'Real GDP',
+              'RSXFS': 'Retail Sales',
+              'EXHOSLUSM495S': 'Existing Home Sales'
+              }
+    data = pdr.data.DataReader(list(labels.keys()), 'fred', today - datetime.timedelta(
+        days=365), today)
+    latest_pct_changes = data.apply(lambda x: x.dropna().pct_change().iloc[-1] if x.dropna().shape[0] > 1 else np.nan)
+    latest_pct_changes.rename(labels, inplace=True)
+    return pd.DataFrame([latest_pct_changes])
+
+
+def get_news(ticker, asof_date):
+    full_url = f'https://api.polygon.io/v2/reference/news?ticker={ticker}&published_utc.lte={asof_date}&limit=50'
+    response = requests.get(full_url, params=params)
+
+    if response.status_code == 200:
+        response_data = response.json()
+        data = response_data.get('results', [])
+
+        if data:
+            return pd.DataFrame(data)
+        else:
+            return None
+
+    else:
+        print(f"Error: Received status code {response.status_code}")
 
 
 def get_market_holidays():
@@ -56,6 +89,62 @@ def get_nearest_open_market_date(input_date_str):
         # Otherwise, go to the next day
         input_date += datetime.timedelta(days=1)
 
+
+def get_options_data(ticker, asof_date):
+    # Generate the URL based on whether you want expired options or not
+    full_url = f"https://api.polygon.io/v2/aggs/ticker/{ticker}/range/1/day/{asof_date}/" \
+               f"{asof_date}?adjusted=true&sort=desc&limit=50000"
+    response = requests.get(full_url, params=params)
+
+    if response.status_code == 200:
+        response_data = response.json()
+        data = response_data.get('results', [])
+
+        if data:
+            data[0].pop('t', None)
+            data[0]['ticker'] = ticker
+            df = pd.DataFrame(data)
+            return df
+        else:
+            return None
+
+    else:
+        print(f"Error: Received status code {response.status_code}")
+
+def get_options_snapshot(ticker):
+    # Generate the URL based on whether you want expired options or not
+    full_url = f"https://api.polygon.io/v3/snapshot/options/{ticker}?limit=250"
+    next_url = full_url  # Start with the first URL
+    all_flattened_data = []
+    while next_url:
+        response = requests.get(next_url, params=params)
+        if response.status_code == 200:
+            response_data = response.json()
+            data = response_data.get('results', [])
+
+            # Flatten the data
+            flattened_data = []
+            for record in data:
+                flat_record = {}
+                for key, value in record.items():
+                    if isinstance(value, dict):
+                        for sub_key, sub_value in value.items():
+                            flat_record[f"{key}_{sub_key}"] = sub_value
+                    else:
+                        flat_record[key] = value
+                flattened_data.append(flat_record)
+
+            all_flattened_data.extend(flattened_data)
+
+            # Get the next URL for pagination, if available
+            next_url = response_data.get('next_url', None)
+        else:
+            print(f"Error: Received status code {response.status_code}")
+            break
+
+    result = pd.DataFrame.from_records(all_flattened_data)
+    result.dropna(inplace=True)
+    return result
 def get_options_chain(ticker, asof_date):
     all_flattened_data = []
 
