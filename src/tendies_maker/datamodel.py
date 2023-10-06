@@ -98,7 +98,7 @@ class TrainingData(BaseModel):
 
         for ticker in tqdm(tickers):
             url = base_url + ticker
-            time.sleep(0.01)
+            time.sleep(0.1)
             response = requests.get(url, headers={"User-Agent": "Chrome"})
             html = bs4.BeautifulSoup(response.text, "html.parser")
             news_table = html.find(id='news-table')
