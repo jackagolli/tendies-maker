@@ -31,14 +31,36 @@ final_data.loc[:, 'days_to_fomc'] = days_to_fomc
 final_data.loc[:, 'max_intraday_change_90d'] = max_changes['value_of_max_intraday'][ticker]
 final_data.loc[:, 'days_since_last_spike'] = max_changes['days_since_last_spike'][ticker]
 final_data.loc[:, 'put_call_volume_ratio'] = metrics['put_call_volume_ratio']
-final_data.loc[:, 'weighted_avg_options_vwap'] = metrics['weighted_avg_vwap']
+final_data.loc[:, 'weighted_options_avg_vwap'] = metrics['weighted_avg_vwap']
 
 econ = get_macro_econ_data()
 
+percent_cols = ['bbipband', 'intraday_change', 'day_change', 'news_score', 'news_confidence', 'max_intraday_change_90d',
+                'put_call_volume_ratio']
+
+
+def format_float(x):
+    formatted = "{:.3f}".format(x)  # limit to 3 decimal places
+    return formatted.rstrip('0').rstrip('.') if '.' in formatted else formatted
+
+
+# Convert the decimals to percentages in the DataFrame
+for col in final_data:
+    if col in percent_cols:
+        final_data[col] = (final_data[col] * 100).apply(
+            lambda x: "{:.2f}%".format(x))  # converting to percentage and formatting as percentage string
+    elif final_data[col].dtype == 'float64':
+        final_data[col] = final_data[col].apply(format_float)  # apply custom formatting
+
+# Do the same for the 'econ' DataFrame if necessary
+for col in econ:
+    econ[col] = econ[col] * 100
+    econ[col] = econ[col].apply(lambda x: "{:.3f}%".format(x))
+
 # Convert the DataFrame to HTML
 transposed_data = final_data.transpose()
-final_data_html = build_table(transposed_data, 'blue_light', index=True, float_format="{:0.3f}".format)
-econ_data_html = build_table(econ, 'blue_light',  float_format="{:0.3f}".format)
+final_data_html = build_table(transposed_data, 'blue_light', index=True)
+econ_data_html = build_table(econ, 'blue_light', float_format="{:0.3f}".format)
 
 sender_email = os.environ['FROM_EMAIL']
 password = os.environ['EMAIL_SECRET']
