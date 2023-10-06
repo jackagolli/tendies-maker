@@ -27,3 +27,4 @@ jobs:
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           EMAIL_SECRET: ${{ secrets.EMAIL_SECRET }}
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
