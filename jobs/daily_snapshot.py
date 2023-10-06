@@ -45,8 +45,8 @@ password = os.environ['EMAIL_SECRET']
 
 msg = EmailMessage()
 msg['From'] = "jagolli192@gmail.com"
-# msg['To'] = ', '.join(["jagolli192@gmail.com", "rhehdgus10@gmail.com"])
-msg['To'] = ', '.join(["jagolli192@gmail.com"])
+msg['To'] = ', '.join(["jagolli192@gmail.com", "rhehdgus10@gmail.com"])
+# msg['To'] = ', '.join(["jagolli192@gmail.com"])
 
 msg['Subject'] = 'TendiesMaker Report'
 html = f"""
