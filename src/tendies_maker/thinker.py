@@ -16,21 +16,18 @@ from ta.momentum import RSIIndicator
 from ta.trend import SMAIndicator, EMAIndicator, MACD, IchimokuIndicator
 from ta.volatility import BollingerBands
 from ta.volume import MFIIndicator, VolumeWeightedAveragePrice
-from transformers import BertTokenizer, BertForSequenceClassification
 from transformers import pipeline
 
 num_proc = mp.cpu_count() - 2
 
 
 def news_sentiment_analysis(news):
-    model = BertForSequenceClassification.from_pretrained("ahmedrachid/FinancialBERT-Sentiment-Analysis", num_labels=3)
-    tokenizer = BertTokenizer.from_pretrained("ahmedrachid/FinancialBERT-Sentiment-Analysis")
-
-    nlp = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
+    nlp = pipeline("text-classification", model="ProsusAI/finbert")
     total_sentiment_score = 0
-    total_confidence = 0
     total_articles = 0
     lambda_rate = 1e-6
+    title_weight = 0.3
+    description_weight = 0.7
 
     # Sentiment Label mapping
     sentiment_map = {
@@ -59,18 +56,16 @@ def news_sentiment_analysis(news):
         description_result = nlp(description)
 
         # Calculate the weighted sentiment and confidence scores
-        weighted_sentiment = (0.3 * sentiment_map[title_result[0]['label']] + 0.7 * sentiment_map[
-            description_result[0]['label']]) * decay_factor
-        weighted_confidence = (0.3 * title_result[0]['score'] + 0.7 * description_result[0]['score']) * decay_factor
+        weighted_sentiment = (title_weight * sentiment_map[title_result[0]['label']] * title_result[0]['score'] +
+                              description_weight * sentiment_map[description_result[0]['label']] *
+                              description_result[0]['score']) * decay_factor
 
         total_sentiment_score += weighted_sentiment
-        total_confidence += weighted_confidence
         total_articles += 1
 
     average_sentiment = total_sentiment_score / total_articles if total_articles else 0
-    average_confidence = total_confidence / total_articles if total_articles else 0
 
-    return average_sentiment, average_confidence
+    return average_sentiment
 
 
 def append_technical_indicators(price_history, sma_windows=None, ema_windows=None):
