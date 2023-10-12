@@ -96,6 +96,9 @@ def append_technical_indicators(price_history, sma_windows=None, ema_windows=Non
 
     ichi_ind = IchimokuIndicator(high=price_history["high"], low=price_history["low"])
     price_history["ichi"] = ichi_ind.ichimoku_a() - ichi_ind.ichimoku_b()
+    price_history["tenkan_kijun_cross"] = (ichi_ind.ichimoku_conversion_line() > ichi_ind.ichimoku_base_line()).astype(int)
+    price_history["price_vs_senkou_a"] = price_history["close"] - ichi_ind.ichimoku_a()
+    price_history["price_vs_senkou_b"] = price_history["close"] - ichi_ind.ichimoku_b()
 
     price_history = pd.concat([price_history,
                                MFIIndicator(high=price_history["high"],
@@ -156,7 +159,7 @@ def append_fluctuations(price_history):
     price_history['intraday_change'] = (price_history['high'] - price_history['open']) / \
                                 price_history['open']
 
-    price_history['day_change'] = (price_history['close'] - price_history['open']) / price_history['open']
+    price_history['day_to_day_change'] = (price_history['close'] - price_history['open']) / price_history['open']
 
     # Calculate max intraday change for each ticker (level 0)
     # Find the date of the max intraday change for each ticker

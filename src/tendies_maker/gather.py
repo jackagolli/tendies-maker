@@ -36,9 +36,21 @@ def get_macro_econ_data():
               }
     data = pdr.data.DataReader(list(labels.keys()), 'fred', today - datetime.timedelta(
         days=365), today)
+    # Calculate the last % change for each macroindicator
     latest_pct_changes = data.apply(lambda x: x.dropna().pct_change().iloc[-1] if x.dropna().shape[0] > 1 else np.nan)
     latest_pct_changes.rename(labels, inplace=True)
-    return pd.DataFrame([latest_pct_changes])
+
+    # Get the last valid index (date of last non-null value) for each macroindicator
+    last_update_dates = data.apply(lambda x: x.last_valid_index())
+    last_update_dates.rename({k: v for k, v in labels.items()}, inplace=True)
+
+    # Combine the latest % changes and last update dates into a single DataFrame
+    combined_data = pd.DataFrame({
+        'Latest % Change': latest_pct_changes,
+        'Last Update Date': last_update_dates
+    })
+
+    return combined_data
 
 
 def get_news(ticker, asof_date):
