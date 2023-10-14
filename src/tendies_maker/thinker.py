@@ -68,6 +68,64 @@ def news_sentiment_analysis(news):
     return average_sentiment
 
 
+def append_dividend_yield(price_history, dividend_df):
+    dividend_df['ex_dividend_date'] = pd.to_datetime(dividend_df['ex_dividend_date'])
+    price_history.reset_index(inplace=True)
+    price_history['timestamp'] = pd.to_datetime(price_history['timestamp']).dt.tz_localize(None)
+
+    merged_df = pd.merge_asof(
+        price_history.sort_values('timestamp'),
+        dividend_df.sort_values('ex_dividend_date'),
+        left_by='symbol',
+        left_on='timestamp',
+        right_on='ex_dividend_date',
+        right_by='ticker',
+        direction='backward'
+    )
+
+    # Calculate annualized dividend yield
+    merged_df['dividend_yield'] = (merged_df['cash_amount'] * merged_df['frequency'] / merged_df['close']) * 100
+
+    # Calculate time since the last dividend
+    merged_df['time_since_last_dividend'] = (merged_df['timestamp'] - merged_df['ex_dividend_date']).dt.days
+
+    # Reset the index and drop dividend-related columns
+    merged_df.set_index(['symbol', 'timestamp'], inplace=True)
+    merged_df.drop(columns=dividend_df.columns.tolist(), inplace=True)
+
+    return merged_df
+
+
+def append_days_to_holiday(price_history, closed_dates):
+    closed_dates = pd.to_datetime(closed_dates)  # Convert to datetime for comparison
+    closed_dates = closed_dates.sort_values()  # Make sure the dates are sorted
+    price_history.reset_index(inplace=True)  # Reset index for easier processing
+    price_history['timestamp'] = pd.to_datetime(price_history['timestamp']).dt.tz_localize(None)  # Ensure timestamps are in the right format
+
+    # Initialize empty list to hold days to next holiday
+    days_to_next_holiday = []
+
+    for index, row in price_history.iterrows():
+        current_timestamp = row['timestamp']
+
+        # Find the next holiday that's greater than the current date
+        next_holiday = closed_dates[closed_dates > current_timestamp].min()
+
+        if pd.isna(next_holiday):  # If there are no more holidays
+            days_to_next_holiday.append(None)
+        else:
+            # Calculate and append the number of days to the next holiday
+            days_to_next_holiday.append((next_holiday - current_timestamp).days)
+
+    # Add the new column to the dataframe
+    price_history['days_to_next_holiday'] = days_to_next_holiday
+
+    # Reset the index back to ['symbol', 'timestamp']
+    price_history.set_index(['symbol', 'timestamp'], inplace=True)
+
+    return price_history
+
+
 def append_technical_indicators(price_history, sma_windows=None, ema_windows=None):
     if sma_windows is None:
         sma_windows = [50]
@@ -96,7 +154,8 @@ def append_technical_indicators(price_history, sma_windows=None, ema_windows=Non
 
     ichi_ind = IchimokuIndicator(high=price_history["high"], low=price_history["low"])
     price_history["ichi"] = ichi_ind.ichimoku_a() - ichi_ind.ichimoku_b()
-    price_history["tenkan_kijun_cross"] = (ichi_ind.ichimoku_conversion_line() > ichi_ind.ichimoku_base_line()).astype(int)
+    price_history["tenkan_kijun_cross"] = (ichi_ind.ichimoku_conversion_line() > ichi_ind.ichimoku_base_line()).astype(
+        int)
     price_history["price_vs_senkou_a"] = price_history["close"] - ichi_ind.ichimoku_a()
     price_history["price_vs_senkou_b"] = price_history["close"] - ichi_ind.ichimoku_b()
 
@@ -155,29 +214,40 @@ def append_options_metrics(options_df):
 
 
 def append_fluctuations(price_history):
-    # Max intraday change since tgt_days
-    price_history['intraday_change'] = (price_history['high'] - price_history['open']) / \
-                                price_history['open']
+    # Calculate intraday change
+    price_history['intraday_change'] = (price_history['high'] - price_history['open']) / price_history['open']
 
-    price_history['day_to_day_change'] = (price_history['close'] - price_history['open']) / price_history['open']
+    # Initialize column to NaN
+    price_history['days_since_last_spike'] = np.nan
 
-    # Calculate max intraday change for each ticker (level 0)
-    # Find the date of the max intraday change for each ticker
-    date_of_max_intraday = price_history['intraday_change'].groupby(level=0).idxmax()
+    value_of_max_intraday = {}
 
-    # Calculate days since the last max intraday change
-    today = datetime.date.today()
-    days_since_last_spike = {ticker: (today - pd.Timestamp(date).date()).days for ticker, (_, date) in
-                             date_of_max_intraday.items()}
+    for symbol in price_history.index.get_level_values('symbol').unique():
+        # Isolate symbol's data
+        symbol_data = price_history.loc[symbol]
 
-    # Also get the value of the last max intraday spike
-    value_of_max_intraday = {ticker: price_history.loc[idx, 'intraday_change'] for
-                             ticker, idx in date_of_max_intraday.items()}
+        # Initialize max intraday change and date
+        max_intraday_change = -np.inf
+        max_intraday_date = None
+
+        for date, row in symbol_data.iterrows():
+            # Update max intraday change and date if this row is a new max
+            if row['intraday_change'] > max_intraday_change:
+                max_intraday_change = row['intraday_change']
+                max_intraday_date = date
+
+            # Calculate days since the last spike for this row
+            if max_intraday_date is not None:
+                days_since_spike = (date - max_intraday_date).days
+                price_history.loc[(symbol, date), 'days_since_last_spike'] = days_since_spike
+
+        # Store the value of max intraday change for this symbol
+        value_of_max_intraday[symbol] = max_intraday_change
 
     results = {
-        'days_since_last_spike': days_since_last_spike,
         'value_of_max_intraday': value_of_max_intraday
     }
+
     return price_history, results
 
 

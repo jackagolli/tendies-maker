@@ -7,6 +7,7 @@ import requests
 from alpaca.data import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
+from bs4 import BeautifulSoup
 import datetime
 import multiprocessing as mp
 import numpy as np
@@ -53,6 +54,13 @@ def get_macro_econ_data():
     return combined_data
 
 
+# def get_news_v2(price_history):
+#     full_url = f'https://api.polygon.io/v2/reference/news?ticker={ticker}&published_utc.lte={asof_date}&limit=50'
+#     response = requests.get(full_url, params=params)
+#
+#     return None
+
+
 def get_news(ticker, asof_date):
     full_url = f'https://api.polygon.io/v2/reference/news?ticker={ticker}&published_utc.lte={asof_date}&limit=50'
     response = requests.get(full_url, params=params)
@@ -76,8 +84,31 @@ def get_market_holidays():
 
     if response.status_code == 200:
         data = response.json()
-        closed_dates = [entry['date'] for entry in data if entry['status'] == 'closed']
-        return list(set(closed_dates))
+        closed_dates_upcoming = [entry['date'] for entry in data if entry['status'] == 'closed']
+        closed_dates_upcoming = list(set(closed_dates_upcoming))
+        # Scrape NYSE holidays
+        response = requests.get('https://www.nyse.com/markets/hours-calendars')
+        soup = BeautifulSoup(response.content, 'html.parser')
+        table = soup.find_all('table')[0]
+        df = pd.read_html(str(table))[0]
+
+        current_year = datetime.datetime.now().year
+        today_date = datetime.datetime.now().strftime('%Y-%m-%d')
+
+        # Assuming 'df' is the dataframe that contains the table data
+        past_close_dates = df[str(current_year)].apply(
+            lambda x: re.search(r'(\w+,\s\w+\s\d+)', x).group(1) if
+            re.search(r'(\w+,\s\w+\s\d+)', x) else None
+        ).dropna().apply(
+            lambda x: datetime.datetime.strptime(f"{current_year}-{x.split(', ')[1]}",
+                                                 '%Y-%B %d').strftime('%Y-%m-%d')
+        ).loc[
+            lambda x: x < today_date
+        ].tolist()
+
+        closed_dates = list(set(closed_dates_upcoming + past_close_dates))
+
+        return sorted(closed_dates)
     else:
         return None
 
@@ -123,6 +154,7 @@ def get_options_data(ticker, asof_date):
     else:
         print(f"Error: Received status code {response.status_code}")
 
+
 def get_options_snapshot(ticker):
     # Generate the URL based on whether you want expired options or not
     full_url = f"https://api.polygon.io/v3/snapshot/options/{ticker}?limit=250"
@@ -157,6 +189,8 @@ def get_options_snapshot(ticker):
     result = pd.DataFrame.from_records(all_flattened_data)
     result.dropna(inplace=True)
     return result
+
+
 def get_options_chain(ticker, asof_date):
     all_flattened_data = []
 
@@ -195,6 +229,25 @@ def get_options_chain(ticker, asof_date):
                 break
 
     return pd.DataFrame.from_records(all_flattened_data)
+
+
+def get_dividends(ticker):
+    full_url = (f"https://api.polygon.io/v3/reference/dividends?ticker="
+                f"{ticker}&limit=1000")
+
+    response = requests.get(full_url, params=params)
+    if response.status_code == 200:
+        response_data = response.json()
+        data = response_data.get('results', [])
+        # Get the next URL for pagination, if available
+        if data:
+            return pd.DataFrame(data)
+        else:
+            return None
+
+    else:
+        print(f"Error: Received status code {response.status_code}")
+        return None
 
 
 def get_price_history(tickers, delta=180):
