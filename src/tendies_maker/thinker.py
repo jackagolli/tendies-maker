@@ -213,7 +213,7 @@ def append_options_metrics(options_df):
     return options_df, metrics
 
 
-def append_fluctuations(price_history):
+def append_fluctuations(price_history, std_multiplier=2):
     # Calculate intraday change
     price_history['intraday_change'] = (price_history['high'] - price_history['open']) / price_history['open']
 
@@ -226,23 +226,24 @@ def append_fluctuations(price_history):
         # Isolate symbol's data
         symbol_data = price_history.loc[symbol]
 
-        # Initialize max intraday change and date
-        max_intraday_change = -np.inf
-        max_intraday_date = None
+        # Calculate the mean and standard deviation of intraday changes
+        mean_change = symbol_data['intraday_change'].mean()
+        std_change = symbol_data['intraday_change'].std()
+
+        # Initialize days_since_last_spike
+        days_since_last_spike = None
 
         for date, row in symbol_data.iterrows():
-            # Update max intraday change and date if this row is a new max
-            if row['intraday_change'] > max_intraday_change:
-                max_intraday_change = row['intraday_change']
-                max_intraday_date = date
+            # Check if the current row is a "spike"
+            is_spike = row['intraday_change'] > mean_change + std_multiplier * std_change
 
-            # Calculate days since the last spike for this row
-            if max_intraday_date is not None:
-                days_since_spike = (date - max_intraday_date).days
-                price_history.loc[(symbol, date), 'days_since_last_spike'] = days_since_spike
+            if is_spike:
+                days_since_last_spike = 0  # Reset the counter
+                value_of_max_intraday[symbol] = row['intraday_change']  # Update max intraday change for this symbol
 
-        # Store the value of max intraday change for this symbol
-        value_of_max_intraday[symbol] = max_intraday_change
+            if days_since_last_spike is not None:
+                price_history.loc[(symbol, date), 'days_since_last_spike'] = days_since_last_spike
+                days_since_last_spike += 1  # Increment the counter for the next iteration
 
     results = {
         'value_of_max_intraday': value_of_max_intraday
