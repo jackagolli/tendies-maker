@@ -23,56 +23,50 @@ from src.tendies_maker.gather import get_news
 num_proc = mp.cpu_count() - 2
 
 
-def news_sentiment_analysis(news, target_date):
-    # Determine the start of the target trading week (assuming it starts on Monday)
-    start_of_week = target_date - datetime.timedelta(days=target_date.weekday())
+def append_sentiment_analysis(row, news_df):
+    target_date = row.name[1]  # 'timestamp' is the second level in the MultiIndex
+    return news_sentiment_analysis(news_df, target_date)
 
-    # Filter out articles outside of the target week
-    news = news[news['published_utc'].apply(
-        lambda x: start_of_week <= datetime.datetime.strptime(x,'%Y-%m-%dT%H:%M:%SZ') <= target_date)]
+
+def news_sentiment_analysis(news, target_date):
+    start_of_window = target_date - datetime.timedelta(days=6)
+
+    # Convert and filter
+    news['published_datetime'] = pd.to_datetime(news['published_utc'])
+    news_filtered = news[(news['published_datetime'] >= start_of_window) &
+                         (news['published_datetime'] <= target_date) &
+                         (~news['title'].isna()) &
+                         (~news['description'].isna())]
+
+    titles = news_filtered['title'].tolist()
+    descriptions = [desc[:512] for desc in news_filtered['description'].tolist()]
 
     nlp = pipeline("text-classification", model="ProsusAI/finbert")
-    total_sentiment_score = 0
-    total_articles = 0
-    lambda_rate = 1e-6
-    title_weight = 0.3
-    description_weight = 0.7
 
-    # Sentiment Label mapping
+    title_results = nlp(titles)
+    description_results = nlp(descriptions)
+
     sentiment_map = {
         'positive': 1,
         'neutral': 0,
         'negative': -1
     }
 
-    for _, article in news.iterrows():
+    title_weight = 0.3
+    description_weight = 0.7
+    lambda_rate = 1e-6
 
-        title = article.get('title')
-        description = article.get('description')
+    # Calculate decay factors in a vectorized manner
+    time_deltas = (target_date - news_filtered['published_datetime']).dt.total_seconds()
+    decay_factors = np.exp(-lambda_rate * time_deltas)
 
-        if pd.isna(title) or pd.isna(description):
-            continue
+    # Compute sentiment scores
+    title_scores = np.array([sentiment_map[result['label']] * result['score'] for result in title_results])
+    description_scores = np.array([sentiment_map[result['label']] * result['score'] for result in description_results])
 
-        description = description[:512]
-        published_time = datetime.datetime.fromisoformat(article['published_utc'].replace('Z', '+00:00'))
-        time_delta = (datetime.datetime.now(datetime.timezone.utc) - published_time).total_seconds()
+    weighted_sentiments = (title_weight * title_scores + description_weight * description_scores) * decay_factors.values
 
-        # Time Decay Factor
-        decay_factor = math.exp(-lambda_rate * time_delta)
-
-        # Sentiment analysis
-        title_result = nlp(title)
-        description_result = nlp(description)
-
-        # Calculate the weighted sentiment and confidence scores
-        weighted_sentiment = (title_weight * sentiment_map[title_result[0]['label']] * title_result[0]['score'] +
-                              description_weight * sentiment_map[description_result[0]['label']] *
-                              description_result[0]['score']) * decay_factor
-
-        total_sentiment_score += weighted_sentiment
-        total_articles += 1
-
-    average_sentiment = total_sentiment_score / total_articles if total_articles else 0
+    average_sentiment = weighted_sentiments.sum() / len(weighted_sentiments) if len(weighted_sentiments) else 0
 
     return average_sentiment
 
