@@ -61,21 +61,32 @@ def get_macro_econ_data():
 #     return None
 
 
-def get_news(ticker, asof_date):
-    full_url = f'https://api.polygon.io/v2/reference/news?ticker={ticker}&published_utc.lte={asof_date}&limit=50'
-    response = requests.get(full_url, params=params)
+def get_news(ticker):
+    # full_url = f'https://api.polygon.io/v2/reference/news?ticker={ticker}&published_utc.lte={asof_date}&limit=1000'
+    full_url = f'https://api.polygon.io/v2/reference/news?ticker={ticker}&limit=1000'
 
-    if response.status_code == 200:
-        response_data = response.json()
-        data = response_data.get('results', [])
+    next_url = full_url  # Start with the first URL
+    all_data = []
 
-        if data:
-            return pd.DataFrame(data)
+    while next_url:
+        response = requests.get(next_url, params=params)
+
+        if response.status_code == 200:
+            response_data = response.json()
+            data = response_data.get('results', [])
+
+            all_data.extend(data)
+
+            # Get the next URL for pagination, if available
+            next_url = response_data.get('next_url', None)
         else:
-            return None
+            print(f"Error: Received status code {response.status_code}")
+            break
 
+    if all_data:
+        return pd.DataFrame(all_data)
     else:
-        print(f"Error: Received status code {response.status_code}")
+        return None
 
 
 def get_market_holidays():

@@ -3,8 +3,6 @@ from email.message import EmailMessage
 import os
 import smtplib
 
-import numpy as np
-import pandas as pd
 from pretty_html_table import build_table
 
 from src.tendies_maker.gather import get_price_history, get_news, get_macro_econ_data, \
@@ -14,13 +12,16 @@ from src.tendies_maker.thinker import append_technical_indicators, news_sentimen
 from src.tendies_maker.datamodel import TrainingData as td
 
 ticker = 'SPY'
+days = 90
+news = get_news(ticker)
+score = news_sentiment_analysis(news, datetime.datetime.now())
+
 price_history = get_price_history([ticker], 90)
 price_history = price_history.sort_index(level=1)
 price_history = append_technical_indicators(price_history)
 price_history.dropna(inplace=True)
 price_history, max_changes = append_fluctuations(price_history)
-news = get_news(ticker, datetime.datetime.now().strftime("%Y-%m-%d"))
-score = news_sentiment_analysis(news)
+
 fomc_dates = td.scrape_fomc_calendar()
 days_to_fomc = (fomc_dates[0] - datetime.datetime.today()).days
 options_chain = get_options_snapshot(ticker)

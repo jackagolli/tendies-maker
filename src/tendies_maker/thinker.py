@@ -18,10 +18,19 @@ from ta.volatility import BollingerBands
 from ta.volume import MFIIndicator, VolumeWeightedAveragePrice
 from transformers import pipeline
 
+from src.tendies_maker.gather import get_news
+
 num_proc = mp.cpu_count() - 2
 
 
-def news_sentiment_analysis(news):
+def news_sentiment_analysis(news, target_date):
+    # Determine the start of the target trading week (assuming it starts on Monday)
+    start_of_week = target_date - datetime.timedelta(days=target_date.weekday())
+
+    # Filter out articles outside of the target week
+    news = news[news['published_utc'].apply(
+        lambda x: start_of_week <= datetime.datetime.strptime(x,'%Y-%m-%dT%H:%M:%SZ') <= target_date)]
+
     nlp = pipeline("text-classification", model="ProsusAI/finbert")
     total_sentiment_score = 0
     total_articles = 0
@@ -100,7 +109,8 @@ def append_days_to_holiday(price_history, closed_dates):
     closed_dates = pd.to_datetime(closed_dates)  # Convert to datetime for comparison
     closed_dates = closed_dates.sort_values()  # Make sure the dates are sorted
     price_history.reset_index(inplace=True)  # Reset index for easier processing
-    price_history['timestamp'] = pd.to_datetime(price_history['timestamp']).dt.tz_localize(None)  # Ensure timestamps are in the right format
+    price_history['timestamp'] = pd.to_datetime(price_history['timestamp']).dt.tz_localize(
+        None)  # Ensure timestamps are in the right format
 
     # Initialize empty list to hold days to next holiday
     days_to_next_holiday = []
