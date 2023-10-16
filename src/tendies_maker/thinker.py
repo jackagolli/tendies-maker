@@ -11,6 +11,7 @@ from datetime import date
 import datetime
 import math
 
+from scipy.special import expit as sigmoid
 from sklearn.preprocessing import MinMaxScaler
 from ta.momentum import RSIIndicator
 from ta.trend import SMAIndicator, EMAIndicator, MACD, IchimokuIndicator
@@ -46,12 +47,6 @@ def news_sentiment_analysis(news, target_date):
     title_results = nlp(titles)
     description_results = nlp(descriptions)
 
-    sentiment_map = {
-        'positive': 1,
-        'neutral': 0,
-        'negative': -1
-    }
-
     title_weight = 0.3
     description_weight = 0.7
     lambda_rate = 1e-6
@@ -60,11 +55,15 @@ def news_sentiment_analysis(news, target_date):
     time_deltas = (target_date - news_filtered['published_datetime']).dt.total_seconds()
     decay_factors = np.exp(-lambda_rate * time_deltas)
 
-    # Compute sentiment scores
-    title_scores = np.array([sentiment_map[result['label']] * result['score'] for result in title_results])
-    description_scores = np.array([sentiment_map[result['label']] * result['score'] for result in description_results])
+    # Extract sentiment scores directly from results
+    title_scores = np.array([result['score'] if result['label'] == 'positive' else
+                             -result['score'] if result['label'] == 'negative' else 0
+                             for result in title_results])
+    description_scores = np.array([result['score'] if result['label'] == 'positive' else
+                                   -result['score'] if result['label'] == 'negative' else 0
+                                   for result in description_results])
 
-    weighted_sentiments = (title_weight * title_scores + description_weight * description_scores) * decay_factors.values
+    weighted_sentiments = (title_weight * title_scores + description_weight * description_scores) * decay_factors
 
     average_sentiment = weighted_sentiments.sum() / len(weighted_sentiments) if len(weighted_sentiments) else 0
 
