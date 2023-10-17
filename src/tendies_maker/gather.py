@@ -16,7 +16,7 @@ import pandas_datareader as pdr
 from tqdm import tqdm
 import yfinance as yf
 
-from src.tendies_maker.db import DB
+from db import DB
 
 num_proc = mp.cpu_count() - 1
 db = DB()
@@ -144,10 +144,11 @@ def get_nearest_open_market_date(input_date_str):
         input_date += datetime.timedelta(days=1)
 
 
-def get_options_data(ticker, asof_date):
-    # Generate the URL based on whether you want expired options or not
-    full_url = f"https://api.polygon.io/v2/aggs/ticker/{ticker}/range/1/day/{asof_date}/" \
-               f"{asof_date}?adjusted=true&sort=desc&limit=50000"
+def get_options_data(ticker, start_date, end_date):
+    # Modify the URL to fetch data for the date range
+    full_url = (f"https://api.polygon.io/v2/aggs/ticker/{ticker}/range/1/day/{start_date}/{end_date}?"
+                f"adjusted=true&sort=desc&limit=50000")
+
     response = requests.get(full_url, params=params)
 
     if response.status_code == 200:
@@ -155,9 +156,11 @@ def get_options_data(ticker, asof_date):
         data = response_data.get('results', [])
 
         if data:
-            data[0].pop('t', None)
-            data[0]['ticker'] = ticker
+            for entry in data:
+                entry['ticker'] = ticker
             df = pd.DataFrame(data)
+            df['date'] = pd.to_datetime(df['t'], unit='ms')
+            df.drop(columns=['t'], inplace=True)
             return df
         else:
             return None
@@ -208,7 +211,7 @@ def get_options_chain(ticker, asof_date):
     for expired in [False]:
         # Generate the URL based on whether you want expired options or not
         full_url = f"https://api.polygon.io/v3/reference/options/contracts?" \
-                   f"underlying_ticker={ticker}&expired={str(expired).lower()}&order=desc&limit=250&sort=" \
+                   f"underlying_ticker={ticker}&expired={str(expired).lower()}&order=desc&limit=1000&sort=" \
                    f"expiration_date&as_of={asof_date}"
 
         next_url = full_url  # Start with the first URL
