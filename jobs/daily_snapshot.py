@@ -16,7 +16,7 @@ days = 90
 news = get_news(ticker)
 score = news_sentiment_analysis(news, datetime.datetime.now())
 
-price_history = get_price_history([ticker], 90)
+price_history = get_price_history([ticker], days)
 price_history = price_history.sort_index(level=1)
 price_history = append_technical_indicators(price_history)
 price_history.dropna(inplace=True)

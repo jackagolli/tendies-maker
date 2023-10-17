@@ -30,8 +30,9 @@ def append_sentiment_analysis(row, news_df):
 
 
 def news_sentiment_analysis(news, target_date):
-    start_of_window = target_date - datetime.timedelta(days=6)
-
+    target_date = pd.Timestamp(target_date).tz_localize('UTC') if (pd.Timestamp(target_date).tzinfo is
+                                                                   None) else pd.Timestamp(target_date)
+    start_of_window = target_date - pd.Timedelta(days=6)
     # Convert and filter
     news['published_datetime'] = pd.to_datetime(news['published_utc'])
     news_filtered = news[(news['published_datetime'] >= start_of_window) &
