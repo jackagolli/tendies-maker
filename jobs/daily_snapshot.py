@@ -40,13 +40,13 @@ final_data.loc[:, 'max_intraday_change_90d'] = max_changes['value_of_max_intrada
 final_data.loc[:, 'put_call_ratio'] = metrics['put_call_volume_ratio']
 final_data.loc[:, 'options_avg_vwap'] = metrics['avg_vwap']
 
-percent_cols = ['bbipband', 'intraday_change', 'day_to_day_change', 'news_score', 'news_confidence',
+percent_cols = ['bbipband', 'intraday_change', 'news_score', 'news_confidence',
                 'max_intraday_change_90d',
                 'put_call_volume_ratio']
 
 order_final = ['news_score', 'days_since_last_spike', 'days_to_fomc', 'put_call_ratio',
                'options_avg_vwap',
-               'max_intraday_change_90d','tenkan_kijun_cross', 'day_to_day_change',
+               'max_intraday_change_90d','tenkan_kijun_cross',
                'intraday_change', 'vwap', 'close',
                'high', 'open', 'volume',
                'trade_count',
