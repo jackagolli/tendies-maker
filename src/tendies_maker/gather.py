@@ -16,7 +16,7 @@ import pandas_datareader as pdr
 from tqdm import tqdm
 import yfinance as yf
 
-from db import DB
+from src.tendies_maker.db import DB
 
 num_proc = mp.cpu_count() - 1
 db = DB()
@@ -163,7 +163,7 @@ def get_options_data(ticker, start_date, end_date):
             df.drop(columns=['t'], inplace=True)
             return df
         else:
-            return None
+            return pd.DataFrame()
 
     else:
         print(f"Error: Received status code {response.status_code}")
@@ -264,9 +264,12 @@ def get_dividends(ticker):
         return None
 
 
-def get_price_history(tickers, delta=180):
+def get_price_history(tickers, delta):
     stock_client = StockHistoricalDataClient(os.environ["ALPACA_API_KEY"], os.environ["ALPACA_SECRET_KEY"])
-    start_date = datetime.datetime.today() - datetime.timedelta(days=delta)
+    if not delta:
+        start_date = datetime.datetime(datetime.datetime.today().year, 1, 1)
+    else:
+        start_date = datetime.datetime.today() - datetime.timedelta(days=delta)
     request_params = StockBarsRequest(
         symbol_or_symbols=tickers,
         timeframe=TimeFrame.Day,
