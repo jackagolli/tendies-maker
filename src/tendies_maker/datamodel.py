@@ -73,7 +73,7 @@ class TrainingData(BaseModel):
         return df.index.tolist(), df
 
     @staticmethod
-    def scrape_fomc_calendar():
+    def scrape_fomc_calendar(upcoming_dates=True):
         response = requests.get('https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm')
         html = bs4.BeautifulSoup(response.text, "html.parser")
         latest_year = html.find('div', {'class': 'panel panel-default'})
@@ -83,11 +83,15 @@ class TrainingData(BaseModel):
         month_results = [div.text.rstrip('*').split('/')[0] for div in
                          latest_year.findAll('div', {'class': 'fomc-meeting__month'})]
 
-        upcoming_dates = [dateutil.parser.parse(f'{month} {day} {year}') for month, day in
-                          zip(month_results, day_results) if dateutil.parser.parse(f'{month} {day} {year}') >
-                          datetime.datetime.today()]
+        if upcoming_dates:
+            dates = [dateutil.parser.parse(f'{month} {day} {year}') for month, day in
+                              zip(month_results, day_results) if dateutil.parser.parse(f'{month} {day} {year}') >
+                              datetime.datetime.today()]
+        else:
+            dates = [dateutil.parser.parse(f'{month} {day} {year}') for month, day in
+                              zip(month_results, day_results)]
 
-        return upcoming_dates
+        return dates
 
     @staticmethod
     def scrape_news_sentiment(tickers):

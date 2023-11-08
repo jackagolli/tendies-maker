@@ -16,14 +16,14 @@ import pandas_datareader as pdr
 from tqdm import tqdm
 import yfinance as yf
 
-from src.tendies_maker.db import DB
+from db import DB
 
 num_proc = mp.cpu_count() - 1
 db = DB()
 params = {'apiKey': os.environ["POLYGON_API_KEY"]}
 
 
-def get_macro_econ_data():
+def get_macro_econ_data(pct_change=True):
     today = datetime.datetime.today()
     labels = {'PCE': 'PCE',
               'UNRATE': 'Unemployment',
@@ -37,19 +37,24 @@ def get_macro_econ_data():
               }
     data = pdr.data.DataReader(list(labels.keys()), 'fred', today - datetime.timedelta(
         days=365), today)
-    # Calculate the last % change for each macroindicator
-    latest_pct_changes = data.apply(lambda x: x.dropna().pct_change().iloc[-1] if x.dropna().shape[0] > 1 else np.nan)
-    latest_pct_changes.rename(labels, inplace=True)
 
-    # Get the last valid index (date of last non-null value) for each macroindicator
-    last_update_dates = data.apply(lambda x: x.last_valid_index())
-    last_update_dates.rename({k: v for k, v in labels.items()}, inplace=True)
+    if not pct_change:
+        return data
+    else:
+        # Calculate the last % change for each macroindicator
+        latest_pct_changes = data.apply(lambda x: x.dropna().pct_change().iloc[-1] if x.dropna().shape[0] > 1 else np.nan)
+        latest_pct_changes.rename(labels, inplace=True)
 
-    # Combine the latest % changes and last update dates into a single DataFrame
-    combined_data = pd.DataFrame({
-        'Latest % Change': latest_pct_changes,
-        'Last Update Date': last_update_dates
-    })
+        # Get the last valid index (date of last non-null value) for each macroindicator
+        last_update_dates = data.apply(lambda x: x.last_valid_index())
+        last_update_dates.rename({k: v for k, v in labels.items()}, inplace=True)
+
+        # Combine the latest % changes and last update dates into a single DataFrame
+        combined_data = pd.DataFrame({
+            'Latest % Change': latest_pct_changes,
+            'Last Update Date': last_update_dates
+        })
+
 
     return combined_data
 
