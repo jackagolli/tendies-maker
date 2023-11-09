@@ -6,7 +6,7 @@ stub = Stub("options-data")
 historical_data_image = (
     Image.debian_slim()
     .apt_install('libpq-dev')
-    .pip_install("pandas")
+    .pip_install("pandas","plotly")
     .pip_install("requests")
     .pip_install("alpaca-py")
     .pip_install("beautifulsoup4")
@@ -32,7 +32,7 @@ stub.volume = Volume.persisted('tm-data-vol')
 
 
 @stub.function(image=historical_data_image, volumes={VOLUME_DIR: stub.volume},
-               mounts=[Mount.from_local_python_packages("gather", "db","config")],
+               mounts=[Mount.from_local_python_packages("gather", "db", "config","utils")],
                secret=Secret.from_name("tm-secrets"),
                timeout=3600)
 def options_data():
@@ -68,7 +68,8 @@ def options_data():
 
 
 @stub.function(image=historical_data_image, volumes={VOLUME_DIR: stub.volume},
-               mounts=[Mount.from_local_python_packages("gather", "db", "thinker", "datamodel", "config")],
+               mounts=[Mount.from_local_python_packages("gather", "db", "thinker", "datamodel", "config",
+                                                        "utils")],
                secret=Secret.from_name("tm-secrets"),
                timeout=3600)
 def training_data():
@@ -150,7 +151,7 @@ def training_data():
     stub.volume.commit()
 
 
-@stub.function(schedule=Cron("0 23 * * 0-4"), timeout=3600)
+@stub.function(schedule=Cron("30 23 * * 0-4"), timeout=3600)
 def daily_data_run():
     options_data.remote()
     training_data.remote()

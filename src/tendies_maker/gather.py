@@ -39,7 +39,7 @@ def get_macro_econ_data(pct_change=True):
         days=365), today)
 
     if not pct_change:
-        return data
+        return data.rename(columns=labels)
     else:
         # Calculate the last % change for each macroindicator
         latest_pct_changes = data.apply(lambda x: x.dropna().pct_change().iloc[-1] if x.dropna().shape[0] > 1 else np.nan)
