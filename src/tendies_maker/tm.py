@@ -6,7 +6,7 @@ stub = Stub("options-data")
 historical_data_image = (
     Image.debian_slim()
     .apt_install('libpq-dev')
-    .pip_install("pandas","plotly")
+    .pip_install("pandas", "plotly")
     .pip_install("requests")
     .pip_install("alpaca-py")
     .pip_install("beautifulsoup4")
@@ -32,7 +32,7 @@ stub.volume = Volume.persisted('tm-data-vol')
 
 
 @stub.function(image=historical_data_image, volumes={VOLUME_DIR: stub.volume},
-               mounts=[Mount.from_local_python_packages("gather", "db", "config","utils")],
+               mounts=[Mount.from_local_python_packages("gather", "db", "config", "utils")],
                secret=Secret.from_name("tm-secrets"),
                timeout=3600)
 def options_data():
@@ -158,7 +158,10 @@ def daily_data_run():
 
 
 @stub.function(image=historical_data_image, volumes={VOLUME_DIR: stub.volume},
-               secret=Secret.from_name("tm-secrets"),schedule=Cron("0 13 * * 1-5"))
+               secret=Secret.from_name("tm-secrets"), schedule=Cron("0 13 * * 1-5"),
+               mounts=[Mount.from_local_python_packages("gather", "db", "thinker", "datamodel", "config",
+                                                        "utils")],
+               )
 def email_snapshot():
     from email.message import EmailMessage
     import os
@@ -167,8 +170,21 @@ def email_snapshot():
     import pandas as pd
     from pretty_html_table import build_table
 
-    df = pd.read_parquet(Path(VOLUME_DIR, "training_data.parquet"))
-    final_data_html = build_table(df.tail(1), 'blue_light', index=True)
+    from gather import get_options_snapshot
+
+    options_df = get_options_snapshot('SPY')
+    put_options = options_df[options_df['details_contract_type'] == 'put']
+    call_options = options_df[options_df['details_contract_type'] == 'call']
+    pc_volume_ratio = put_options['day_volume'].sum() / call_options['day_volume'].sum()
+    pc_open_interest_ratio = put_options['open_interest'].sum() / call_options['open_interest'].sum()
+    net_delta = call_options['greeks_delta'].sum() + put_options['greeks_delta'].sum()
+
+    print(f"Put/Call Volume Ratio: {pc_volume_ratio:.2f}")
+    print(f"Put/Call Open Interest Ratio: {pc_open_interest_ratio:.2f}")
+    print(f"Net Delta Positioning: {net_delta:.2f}")
+
+    df = pd.read_parquet(Path(VOLUME_DIR, "training_data.parquet")).tail(2).transpose()
+    final_data_html = build_table(df, 'blue_light', index=True)
     sender_email = os.environ['FROM_EMAIL']
     password = os.environ['EMAIL_SECRET']
 
@@ -180,9 +196,46 @@ def email_snapshot():
     msg['Subject'] = 'TendiesMaker Report'
     html = f"""
     <html>
-      <head></head>
+      <head>
+        <style>
+          table {{
+            width: 100%;
+            border-collapse: collapse;
+          }}
+          th, td {{
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+          }}
+          th {{
+            background-color: #f2f2f2;
+          }}
+        </style>
+      </head>
       <body>
         <h1>SPY Summary</h1>
+        <table>
+          <tr>
+            <th>Metric</th>
+            <th>Value</th>
+          </tr>
+          <tr>
+            <td>Put/Call Volume Ratio</td>
+            <td>{pc_volume_ratio:.2f}</td>
+          </tr>
+          <tr>
+            <td>Put/Call Open Interest Ratio</td>
+            <td>{pc_open_interest_ratio:.2f}</td>
+          </tr>
+          <tr>
+            <td>Net Delta Positioning</td>
+            <td>{net_delta:.2f}</td>
+          </tr>
+          <tr>
+            <td>Gamma Exposure (GEX)</td>
+            <td>{gex:.2f}</td>
+          </tr>
+        </table>
         {final_data_html}
       </body>
     </html>
