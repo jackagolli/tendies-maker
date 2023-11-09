@@ -23,9 +23,9 @@ from ta.volatility import BollingerBands
 from ta.volume import MFIIndicator
 from tqdm import tqdm
 
-from src.tendies_maker.utils import pct_to_numeric
-from src.tendies_maker.gather import gather_dte, get_put_call_magnitude, get_call_put_ratio, get_price_history
-from src.tendies_maker.db import DB
+from utils import pct_to_numeric
+from gather import gather_dte, get_put_call_magnitude, get_call_put_ratio, get_price_history
+from db import DB
 
 db = DB()
 

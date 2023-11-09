@@ -24,7 +24,7 @@ historical_data_image = (
     .pip_install("nltk")
     .pip_install("loguru")
     .pip_install("ta")
-    .pip_install("transformers")
+    .pip_install("diffusers[torch]", "transformers", "ftfy", "accelerate")
     .pip_install("scikit-learn")
 )
 VOLUME_DIR = "/tm-data"
@@ -59,8 +59,9 @@ def options_data():
         option_data = get_options_data(option_ticker, min_date, max_date)
         all_options_data.append(option_data)
 
-    # Concatenate all the fetched data
     full_options_data_df = pd.concat(all_options_data)
+    full_options_data_df = full_options_data_df.merge(all_relevant_options[['ticker', 'contract_type']],
+                                                      left_on='ticker', right_on='ticker', how='left')
     logger.info(f'Saving options data to parquet')
     full_options_data_df.to_parquet(Path(VOLUME_DIR, "options_data.parquet"))
     stub.volume.commit()
