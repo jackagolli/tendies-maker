@@ -231,10 +231,6 @@ def email_snapshot():
             <td>Net Delta Positioning</td>
             <td>{net_delta:.2f}</td>
           </tr>
-          <tr>
-            <td>Gamma Exposure (GEX)</td>
-            <td>{gex:.2f}</td>
-          </tr>
         </table>
         {final_data_html}
       </body>
