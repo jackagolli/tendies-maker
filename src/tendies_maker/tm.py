@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from modal import Stub, Volume, Image, Mount, Secret, Period
+from modal import Stub, Volume, Image, Mount, Secret, Period, Cron
 
 stub = Stub("options-data")
 historical_data_image = (
@@ -19,25 +19,36 @@ historical_data_image = (
     .pip_install("pyarrow")
     .pip_install("fastparquet")
     .pip_install("duckdb")
+    .pip_install("boto3")
+    .pip_install("pretty-html-table")
+    .pip_install("nltk")
+    .pip_install("loguru")
+    .pip_install("ta")
+    .pip_install("transformers")
+    .pip_install("scikit-learn")
 )
 VOLUME_DIR = "/tm-data"
 stub.volume = Volume.persisted('tm-data-vol')
 
 
 @stub.function(image=historical_data_image, volumes={VOLUME_DIR: stub.volume},
-               mounts=[Mount.from_local_python_packages("gather", "db")],
-               secret=Secret.from_name("tm-secrets"))
+               mounts=[Mount.from_local_python_packages("gather", "db","config")],
+               secret=Secret.from_name("tm-secrets"),
+               timeout=3600)
 def options_data():
     import pandas as pd
     from tqdm import tqdm
     from gather import get_price_history, get_options_chain, get_options_data
+    from config import logger
 
     ticker = 'SPY'
+    logger.info(f'Fetching price history for {ticker}')
     price_history = get_price_history([ticker], None)
 
     min_date = price_history.index.get_level_values('timestamp').min().strftime("%Y-%m-%d")
     max_date = price_history.index.get_level_values('timestamp').max().strftime('%Y-%m-%d')
 
+    logger.info(f'Fetching {ticker} options data for dates {min_date} to {max_date}')
     earliest_options = get_options_chain(ticker, min_date)
     latest_options = get_options_chain(ticker, max_date)
     all_relevant_options = pd.concat([earliest_options, latest_options]).drop_duplicates()
@@ -50,21 +61,21 @@ def options_data():
 
     # Concatenate all the fetched data
     full_options_data_df = pd.concat(all_options_data)
+    logger.info(f'Saving options data to parquet')
     full_options_data_df.to_parquet(Path(VOLUME_DIR, "options_data.parquet"))
     stub.volume.commit()
 
 
 @stub.function(image=historical_data_image, volumes={VOLUME_DIR: stub.volume},
-               mounts=[Mount.from_local_python_packages("gather", "db", "thinker", "datamodel")],
-               secret=Secret.from_name("tm-secrets"))
+               mounts=[Mount.from_local_python_packages("gather", "db", "thinker", "datamodel", "config")],
+               secret=Secret.from_name("tm-secrets"),
+               timeout=3600)
 def training_data():
-    import datetime
-    import pytz
-
     import pandas as pd
     from tqdm import tqdm
     tqdm.pandas()
 
+    from config import logger
     from datamodel import TrainingData as td
     from gather import get_price_history, get_news, get_dividends, get_market_holidays, get_macro_econ_data
     from thinker import append_sentiment_analysis, append_days_to_holiday, append_dividend_yield, \
@@ -72,13 +83,18 @@ def training_data():
 
     ticker = 'SPY'
 
+    logger.info(f'Fetching price history for {ticker}')
     price_history = get_price_history([ticker], None)
     price_history = price_history.sort_index(level=1)
+
+    logger.info(f'Appending {ticker} technical indicators')
     price_history = append_technical_indicators(price_history)
+
+    logger.info(f'Appending {ticker} price fluctuations')
     price_history, fluctuations = append_fluctuations(price_history)
     timestamps = price_history.index.get_level_values('timestamp').normalize().tz_localize(None)
 
-    # Macro econ data
+    logger.info(f'Appending macroeconomic indicators')
     econ = get_macro_econ_data(False)
     econ = econ.resample('D').ffill().bfill()
     price_history['date_for_merge'] = timestamps
@@ -87,7 +103,7 @@ def training_data():
     price_history.drop(columns=['date_for_merge'], inplace=True)
     price_history.fillna(method='ffill', inplace=True)
 
-    # FOMC dates
+    logger.info(f'Appending days to FOMC')
     fomc_dates = pd.to_datetime(td.scrape_fomc_calendar(False))
     next_fomc_indices = fomc_dates.searchsorted(timestamps)
     days_to_fomc = [(fomc_dates[next_fomc_indices[i]] - timestamps[i]).days
@@ -96,8 +112,8 @@ def training_data():
     price_history['days_to_fomc'] = days_to_fomc
     price_history.loc[is_fomc_date, 'days_to_fomc'] = 0
 
-    # Get and merge latest options data
-    options_df = pd.read_parquet("options_data.parquet")
+    logger.info(f'Appending latest options data p/c ratio')
+    options_df = pd.read_parquet(Path(VOLUME_DIR, "options_data.parquet"))
 
     agg_data = options_df.groupby(['date', 'contract_type']).agg(
         total_volume=('v', 'sum'),
@@ -117,12 +133,15 @@ def training_data():
 
     price_history['day_of_week'] = price_history.index.get_level_values('timestamp').day_name()
 
+    logger.info(f'Appending days to holiday')
     closed_dates = get_market_holidays()
     price_history = append_days_to_holiday(price_history, closed_dates)
 
+    logger.info(f'Appending {ticker} dividend yield')
     dividends_df = get_dividends(ticker)
     price_history = append_dividend_yield(price_history, dividends_df)
 
+    logger.info(f'Appending news sentiment')
     news = get_news(ticker)
     price_history['news_sentiment'] = price_history.progress_apply(lambda row: append_sentiment_analysis(row, news),
                                                                    axis=1)
@@ -130,18 +149,52 @@ def training_data():
     stub.volume.commit()
 
 
-@stub.function(schedule=Period(days=1), timeout=3600)
+@stub.function(schedule=Cron("0 23 * * 0-4"), timeout=3600)
 def daily_data_run():
     options_data.remote()
     training_data.remote()
 
 
-@stub.function(schedule=Period(days=1), timeout=3600)
+@stub.function(image=historical_data_image, volumes={VOLUME_DIR: stub.volume},
+               secret=Secret.from_name("tm-secrets"),schedule=Cron("0 13 * * 1-5"))
 def email_snapshot():
-    options_data.remote()
-    training_data.remote()
+    from email.message import EmailMessage
+    import os
+    import smtplib
+
+    import pandas as pd
+    from pretty_html_table import build_table
+
+    df = pd.read_parquet(Path(VOLUME_DIR, "training_data.parquet"))
+    final_data_html = build_table(df.tail(1), 'blue_light', index=True)
+    sender_email = os.environ['FROM_EMAIL']
+    password = os.environ['EMAIL_SECRET']
+
+    msg = EmailMessage()
+    msg['From'] = "jagolli192@gmail.com"
+    msg['To'] = ', '.join(["jagolli192@gmail.com", "rhehdgus10@gmail.com"])
+    # msg['To'] = ', '.join(["jagolli192@gmail.com"])
+
+    msg['Subject'] = 'TendiesMaker Report'
+    html = f"""
+    <html>
+      <head></head>
+      <body>
+        <h1>SPY Summary</h1>
+        {final_data_html}
+      </body>
+    </html>
+    """
+
+    # csv_buffer = io.StringIO()
+    # msg.add_attachment(csv_buffer.getvalue(), filename=filename)
+    msg.set_content(html, subtype='html')
+    # Create secure connection with server and send email
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(sender_email, password)
+        server.send_message(msg)
 
 
 @stub.local_entrypoint()
 def main():
-    training_data.local()
+    email_snapshot.remote()

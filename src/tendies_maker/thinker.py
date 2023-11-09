@@ -9,17 +9,13 @@ import multiprocessing as mp
 from pathlib import Path
 from datetime import date
 import datetime
-import math
 
-from scipy.special import expit as sigmoid
 from sklearn.preprocessing import MinMaxScaler
 from ta.momentum import RSIIndicator
 from ta.trend import SMAIndicator, EMAIndicator, MACD, IchimokuIndicator
 from ta.volatility import BollingerBands
 from ta.volume import MFIIndicator, VolumeWeightedAveragePrice
 from transformers import pipeline
-
-from src.tendies_maker.gather import get_news
 
 num_proc = mp.cpu_count() - 2
 
