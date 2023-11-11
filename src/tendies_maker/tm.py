@@ -1,33 +1,18 @@
 from pathlib import Path
 
-from fastapi import FastAPI, Header
-from modal import Stub, Volume, Image, Mount, Secret, Period, Cron, asgi_app, web_endpoint
 from pydantic import BaseModel
+from fastapi import FastAPI
+from modal import Stub, Volume, Image, Mount, Secret, Cron, asgi_app, web_endpoint
 
-stub = Stub("options-data")
+stub = Stub("tm")
+web_image = Image.debian_slim().pip_install("pandas", "scikit-learn", "numpy")
 image = (
     Image.debian_slim()
     .apt_install('libpq-dev')
-    .pip_install("pandas", "plotly", "keras", "keras", "tensorflow", "pyyaml", "h5py")
-    .pip_install("requests")
-    .pip_install("alpaca-py")
-    .pip_install("beautifulsoup4")
-    .pip_install("pandas-datareader")
-    .pip_install("yfinance")
-    .pip_install("tqdm")
-    .pip_install("python-dotenv")
-    .pip_install("SQLAlchemy")
-    .pip_install("psycopg2")
-    .pip_install("pyarrow")
-    .pip_install("fastparquet")
-    .pip_install("duckdb")
-    .pip_install("boto3")
-    .pip_install("pretty-html-table")
-    .pip_install("nltk")
-    .pip_install("loguru")
-    .pip_install("ta")
-    .pip_install("diffusers[torch]", "transformers", "ftfy", "accelerate")
-    .pip_install("scikit-learn")
+    .pip_install("pandas", "plotly", "keras", "keras", "tensorflow", "pyyaml", "h5py", "requests",
+                 "alpaca-py", "beautifulsoup4", "pandas-datareader", "yfinance", "tqdm", "python-dotenv", "psycopg2",
+                 "pyarrow", "SQLAlchemy", "fastparquet", "duckdb", "boto3", "pretty-html-table", "nltk", "loguru",
+                 "ta", "diffusers[torch]", "transformers", "ftfy", "accelerate", "scikit-learn", "pydantic", "fastapi")
 )
 VOLUME_DIR = "/tm-data"
 stub.volume = Volume.persisted('tm-data-vol')
@@ -68,8 +53,8 @@ class Prediction(BaseModel):
 
 def _preprocess_data(df):
     import pandas as pd
-    day_of_week = pd.get_dummies(df['day_of_week'], prefix='day_of_week', dtype=float, drop_first=True)
-    df = pd.concat([df, day_of_week], axis=1)
+    day_of_week = pd.get_dummies(df['day_of_week'], prefix='day_of_week', dtype=float)
+    df = pd.concat([df, day_of_week], axis=1).drop('day_of_week', axis=1)
     return df
 
 
@@ -193,21 +178,23 @@ def training_data():
     stub.volume.commit()
 
 
-@stub.function(schedule=Cron("30 23 * * 0-4"), timeout=3600)
-def daily_data_run():
-    options_data.remote()
-    training_data.remote()
-
-
-@stub.function()
+@stub.function(image=web_image, volumes={VOLUME_DIR: stub.volume}, )
 @web_endpoint(method="POST")
 def predict(prediction: Prediction):
-    return prediction
+    import numpy as np
+    import pandas as pd
+    from sklearn.preprocessing import StandardScaler
+    mean = np.load(Path(VOLUME_DIR, 'scaler_mean.npy'))
+    scale = np.load(Path(VOLUME_DIR, 'scaler_scale.npy'))
+    df = pd.DataFrame([prediction.dict()])
+    df = _preprocess_data(df)
 
-@stub.function(image=image)
-@asgi_app()
-def fastapi_app():
-    return web_app
+    scaler = StandardScaler()
+    scaler.mean_ = mean
+    scaler.scale_ = scale
+    scaler.transform(df)
+    print(df)
+    return {'result': True}
 
 
 @stub.function(image=image, volumes={VOLUME_DIR: stub.volume},
@@ -313,7 +300,7 @@ def train():
     from keras.callbacks import EarlyStopping, ReduceLROnPlateau
     from keras.regularizers import l1, l2
 
-    df = pd.read_parquet("training_data.parquet")
+    df = pd.read_parquet(Path(VOLUME_DIR, "training_data.parquet"))
     df = _preprocess_data(df)
 
     # define target
@@ -324,10 +311,10 @@ def train():
     # Create the target by comparing the future price after 'look_forward_days' with the current price
     df['target'] = ((df['max_future_high'] - df['open']) / df['open']) > price_increase_threshold
     df['target'] = df['target'].astype(int)
-    Y = df['target'].to_numpy()
-
-    # drop last row
     df = df.iloc[:-1]
+
+    Y = df['target'].to_numpy()
+    # drop last row
     df.drop(columns=['target', 'max_future_high', 'close', 'open', 'high', 'low'], inplace=True)
     X = df.to_numpy
 
@@ -366,10 +353,22 @@ def train():
 
     model.fit(X_transformed, Y, epochs=20, batch_size=12, callbacks=[early_stopping, reduce_lr])
 
-    model.save('tm_basic_nn.h5')
+    model.save('tm_basic_nn.keras')
     stub.volume.commit()
+
+
+@stub.function(image=image)
+@asgi_app()
+def fastapi_app():
+    return web_app
+
+
+@stub.function(schedule=Cron("30 23 * * 1-5"), timeout=3600)
+def daily_data_run():
+    options_data.remote()
+    training_data.remote()
 
 
 @stub.local_entrypoint()
 def main():
-    train.local()
+    train.remote()
