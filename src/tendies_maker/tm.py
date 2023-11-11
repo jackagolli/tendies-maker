@@ -6,7 +6,7 @@ stub = Stub("options-data")
 historical_data_image = (
     Image.debian_slim()
     .apt_install('libpq-dev')
-    .pip_install("pandas", "plotly", "keras", "keras", "tensorflow")
+    .pip_install("pandas", "plotly", "keras", "keras", "tensorflow", "pyyaml", "h5py")
     .pip_install("requests")
     .pip_install("alpaca-py")
     .pip_install("beautifulsoup4")
@@ -251,20 +251,15 @@ def email_snapshot():
 def train():
     import pandas as pd
     import numpy as np
-    import matplotlib.pyplot as plt
 
     from sklearn.decomposition import PCA
-    from sklearn.preprocessing import StandardScaler, MinMaxScaler
-    from sklearn.model_selection import StratifiedKFold
+    from sklearn.preprocessing import StandardScaler
 
     from keras.models import Sequential
-    from keras.layers import Dense, Dropout, BatchNormalization, LSTM
+    from keras.layers import Dense, Dropout, BatchNormalization
     from keras.callbacks import EarlyStopping, ReduceLROnPlateau
     from keras.regularizers import l1, l2
-    from scikeras.wrappers import KerasClassifier
-    from sklearn.metrics import recall_score, confusion_matrix, precision_score
 
-    import tensorflow as tf
     df = pd.read_parquet("training_data.parquet")
     day_of_week = pd.get_dummies(df['day_of_week'], prefix='day_of_week', dtype=float)
     df = pd.concat([df, day_of_week], axis=1)
@@ -278,15 +273,14 @@ def train():
     df['target'] = ((df['max_future_high'] - df['open']) / df['open']) > price_increase_threshold
     df['target'] = df['target'].astype(int)
 
-    Y = df['target'].iloc[:-1].to_numpy()
+    df = df.iloc[:-1]
     df.drop(columns=['target','max_future_high', 'close', 'day_of_week', 'open', 'high', 'low'], inplace=True)
+
     X = df.to_numpy
+    Y = df['target'].to_numpy()
 
     # normalize
-    X_std = MinMaxScaler().fit_transform(df)
-
-    last_row_std = X_std[-1:]
-    X_std = X_std[:-1]
+    X_std = StandardScaler().fit_transform(df)
     # Compute PCA
     pca = PCA()
     pca.fit(X_std)
@@ -313,24 +307,10 @@ def train():
     early_stopping = EarlyStopping(monitor='loss', patience=3)
     reduce_lr = ReduceLROnPlateau(monitor='loss', factor=0.2, patience=3, min_lr=0.0001)
 
-    model.fit(X_transformed, Y, epochs=20, batch_size=16, callbacks=[early_stopping, reduce_lr])
+    model.fit(X_transformed, Y, epochs=20, batch_size=12, callbacks=[early_stopping, reduce_lr])
 
-    # Predict with the last row
-
-    last_row_transformed = dr_algorithm.transform(last_row_std)
-    last_row_pred = model.predict(last_row_transformed)
-    last_row_pred = (last_row_pred > 0.5)
-    print(f"Prediction for the last row: {last_row_pred[0][0]}")
-
-    y_pred = model.predict(X_transformed)
-    y_pred = (y_pred > 0.5)
-    recall = recall_score(Y, y_pred)
-    conf_matrix = confusion_matrix(Y, y_pred)
-    print(f"Recall: {recall}")
-    print(f"Precision: {precision_score(Y,y_pred)}")
-    print(f"Confusion matrix for Test Set: {conf_matrix}")
-
-    breakpoint()
+    model.save('tm_basic_nn.h5')
+    stub.volume.commit()
 
 
 @stub.local_entrypoint()
