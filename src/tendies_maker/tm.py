@@ -1,7 +1,6 @@
 from pathlib import Path
 
 from fastapi import FastAPI, Header
-from fastapi.responses import HTMLResponse
 from modal import Stub, Volume, Image, Mount, Secret, Period, Cron, asgi_app, web_endpoint
 from pydantic import BaseModel
 
@@ -9,7 +8,7 @@ stub = Stub("options-data")
 image = (
     Image.debian_slim()
     .apt_install('libpq-dev')
-    .pip_install("pandas", "plotly", "keras", "keras", "tensorflow", "pyyaml", "h5py", "pydantic", "fastapi")
+    .pip_install("pandas", "plotly", "keras", "keras", "tensorflow", "pyyaml", "h5py")
     .pip_install("requests")
     .pip_install("alpaca-py")
     .pip_install("beautifulsoup4")
@@ -59,7 +58,7 @@ class Prediction(BaseModel):
     retail_sales: float
     existing_home_sales: float
     days_to_fomc: int
-    pc_ratio_volume_: float
+    pc_ratio_volume: float
     day_of_week: str
     days_to_next_holiday: int
     dividend_yield: float
@@ -164,7 +163,7 @@ def training_data():
         total_volume=('v', 'sum'),
     ).unstack()
     agg_data['pc_ratio_volume'] = agg_data[('total_volume', 'put')] / agg_data[('total_volume', 'call')]
-    agg_data.columns = ['_'.join(col).strip() for col in agg_data.columns.values]
+    agg_data.columns = ['_'.join(col).strip() if isinstance(col, tuple) else col for col in agg_data.columns.values]
 
     agg_data.reset_index(inplace=True)
     price_history.reset_index(inplace=True)
@@ -203,9 +202,7 @@ def daily_data_run():
 @stub.function()
 @web_endpoint(method="POST")
 def predict(prediction: Prediction):
-    import pandas as pd
-    return HTMLResponse(f"<html>Hello, {prediction}!</html>")
-
+    return prediction
 
 @stub.function(image=image)
 @asgi_app()

@@ -26,14 +26,14 @@ params = {'apiKey': os.environ["POLYGON_API_KEY"]}
 def get_macro_econ_data(pct_change=True):
     today = datetime.datetime.today()
     labels = {'PCE': 'PCE',
-              'UNRATE': 'Unemployment',
-              'MICH': 'Inflation Expectation',
+              'UNRATE': 'unemployment',
+              'MICH': 'inflation_expectation',
               'JTSJOL': 'Job Openings',
-              'FEDFUNDS': 'Fed Funds Rate',
-              'M2REAL': 'Real M2',
-              'GDPC1': 'Real GDP',
-              'RSXFS': 'Retail Sales',
-              'EXHOSLUSM495S': 'Existing Home Sales'
+              'FEDFUNDS': 'fed_funds_rate',
+              'M2REAL': 'real_m2',
+              'GDPC1': 'real_gdp',
+              'RSXFS': 'retail_sales',
+              'EXHOSLUSM495S': 'existing_home_sales'
               }
     data = pdr.data.DataReader(list(labels.keys()), 'fred', today - datetime.timedelta(
         days=365), today)
