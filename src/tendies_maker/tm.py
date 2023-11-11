@@ -1,12 +1,15 @@
 from pathlib import Path
 
-from modal import Stub, Volume, Image, Mount, Secret, Period, Cron
+from fastapi import FastAPI, Header
+from fastapi.responses import HTMLResponse
+from modal import Stub, Volume, Image, Mount, Secret, Period, Cron, asgi_app, web_endpoint
+from pydantic import BaseModel
 
 stub = Stub("options-data")
-historical_data_image = (
+image = (
     Image.debian_slim()
     .apt_install('libpq-dev')
-    .pip_install("pandas", "plotly", "keras", "keras", "tensorflow", "pyyaml", "h5py")
+    .pip_install("pandas", "plotly", "keras", "keras", "tensorflow", "pyyaml", "h5py", "pydantic", "fastapi")
     .pip_install("requests")
     .pip_install("alpaca-py")
     .pip_install("beautifulsoup4")
@@ -29,9 +32,49 @@ historical_data_image = (
 )
 VOLUME_DIR = "/tm-data"
 stub.volume = Volume.persisted('tm-data-vol')
+web_app = FastAPI()
 
 
-@stub.function(image=historical_data_image, volumes={VOLUME_DIR: stub.volume},
+class Prediction(BaseModel):
+    volume: float
+    trade_count: float
+    vwap: float
+    rsi: float
+    bbipband: float
+    MACD_12_26: float
+    ichi: float
+    tenkan_kijun_cross: int
+    price_vs_senkou_a: float
+    price_vs_senkou_b: float
+    mfi_14: float
+    intraday_change: float
+    days_since_last_spike: int
+    PCE: float
+    unemployment: float
+    inflation_expectation: float
+    job_openings: float
+    fed_funds_rate: float
+    real_m2: float
+    real_gdp: float
+    retail_sales: float
+    existing_home_sales: float
+    days_to_fomc: int
+    pc_ratio_volume_: float
+    day_of_week: str
+    days_to_next_holiday: int
+    dividend_yield: float
+    time_since_last_dividend: int
+    news_sentiment: float
+
+
+def _preprocess_data(df):
+    import pandas as pd
+    day_of_week = pd.get_dummies(df['day_of_week'], prefix='day_of_week', dtype=float, drop_first=True)
+    df = pd.concat([df, day_of_week], axis=1)
+    return df
+
+
+@stub.function(image=image, volumes={VOLUME_DIR: stub.volume},
                mounts=[Mount.from_local_python_packages("gather", "db", "config", "utils")],
                secret=Secret.from_name("tm-secrets"),
                timeout=3600)
@@ -67,7 +110,7 @@ def options_data():
     stub.volume.commit()
 
 
-@stub.function(image=historical_data_image, volumes={VOLUME_DIR: stub.volume},
+@stub.function(image=image, volumes={VOLUME_DIR: stub.volume},
                mounts=[Mount.from_local_python_packages("gather", "db", "thinker", "datamodel", "config",
                                                         "utils")],
                secret=Secret.from_name("tm-secrets"),
@@ -157,7 +200,20 @@ def daily_data_run():
     training_data.remote()
 
 
-@stub.function(image=historical_data_image, volumes={VOLUME_DIR: stub.volume},
+@stub.function()
+@web_endpoint(method="POST")
+def predict(prediction: Prediction):
+    import pandas as pd
+    return HTMLResponse(f"<html>Hello, {prediction}!</html>")
+
+
+@stub.function(image=image)
+@asgi_app()
+def fastapi_app():
+    return web_app
+
+
+@stub.function(image=image, volumes={VOLUME_DIR: stub.volume},
                secret=Secret.from_name("tm-secrets"), schedule=Cron("0 13 * * 1-5"),
                mounts=[Mount.from_local_python_packages("gather", "db", "thinker", "datamodel", "config",
                                                         "utils")],
@@ -246,7 +302,7 @@ def email_snapshot():
         server.send_message(msg)
 
 
-@stub.function(image=historical_data_image, volumes={VOLUME_DIR: stub.volume},
+@stub.function(image=image, volumes={VOLUME_DIR: stub.volume},
                secret=Secret.from_name("tm-secrets"))
 def train():
     import pandas as pd
@@ -261,8 +317,7 @@ def train():
     from keras.regularizers import l1, l2
 
     df = pd.read_parquet("training_data.parquet")
-    day_of_week = pd.get_dummies(df['day_of_week'], prefix='day_of_week', dtype=float)
-    df = pd.concat([df, day_of_week], axis=1)
+    df = _preprocess_data(df)
 
     # define target
     look_forward_days = 3  # You can change this to 2 or 3 as per your strategy
@@ -272,15 +327,20 @@ def train():
     # Create the target by comparing the future price after 'look_forward_days' with the current price
     df['target'] = ((df['max_future_high'] - df['open']) / df['open']) > price_increase_threshold
     df['target'] = df['target'].astype(int)
-
-    df = df.iloc[:-1]
-    df.drop(columns=['target','max_future_high', 'close', 'day_of_week', 'open', 'high', 'low'], inplace=True)
-
-    X = df.to_numpy
     Y = df['target'].to_numpy()
 
+    # drop last row
+    df = df.iloc[:-1]
+    df.drop(columns=['target', 'max_future_high', 'close', 'open', 'high', 'low'], inplace=True)
+    X = df.to_numpy
+
     # normalize
-    X_std = StandardScaler().fit_transform(df)
+    scaler = StandardScaler()
+    scaler.fit(df)
+    X_std = scaler.transform(df)
+    np.save(Path(VOLUME_DIR, 'tm_scaler_mean.npy'), scaler.mean_)
+    np.save(Path(VOLUME_DIR, 'tm_scaler_scale.npy'), scaler.scale_)
+
     # Compute PCA
     pca = PCA()
     pca.fit(X_std)
