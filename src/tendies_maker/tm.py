@@ -330,7 +330,7 @@ def train():
     from sklearn.preprocessing import StandardScaler
 
 
-    df = pd.read_parquet( "training_data.parquet")
+    df = pd.read_parquet(Path(VOLUME_DIR,"training_data.parquet"))
     df = _preprocess_data(df)
 
     # define target
