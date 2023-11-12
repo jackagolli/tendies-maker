@@ -202,8 +202,8 @@ def predict(prediction: Prediction):
     model = keras.models.load_model(Path(VOLUME_DIR, 'tm_basic_nn.keras'))
     pred = model.predict(X_transformed)
     pred = (pred > 0.5)
-    result = 'BUY' if pred[0][0] else 'SELL'
-    return {'prediction': result}
+    result = 'BUY' if pred[0][0] else 'NOT BUY'
+    return {'signal': result}
 
 
 @stub.function(image=image, volumes={VOLUME_DIR: stub.volume},
@@ -408,4 +408,4 @@ def daily_data_run():
 
 @stub.local_entrypoint()
 def main():
-    train.local()
+    train.remote()
