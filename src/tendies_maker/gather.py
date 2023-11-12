@@ -28,7 +28,7 @@ def get_macro_econ_data(pct_change=True):
     labels = {'PCE': 'PCE',
               'UNRATE': 'unemployment',
               'MICH': 'inflation_expectation',
-              'JTSJOL': 'Job Openings',
+              'JTSJOL': 'job_openings',
               'FEDFUNDS': 'fed_funds_rate',
               'M2REAL': 'real_m2',
               'GDPC1': 'real_gdp',

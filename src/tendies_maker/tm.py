@@ -5,14 +5,14 @@ from fastapi import FastAPI
 from modal import Stub, Volume, Image, Mount, Secret, Cron, asgi_app, web_endpoint
 
 stub = Stub("tm")
-web_image = Image.debian_slim().pip_install("pandas", "scikit-learn", "numpy")
 image = (
     Image.debian_slim()
     .apt_install('libpq-dev')
     .pip_install("pandas", "plotly", "keras", "keras", "tensorflow", "pyyaml", "h5py", "requests",
                  "alpaca-py", "beautifulsoup4", "pandas-datareader", "yfinance", "tqdm", "python-dotenv", "psycopg2",
                  "pyarrow", "SQLAlchemy", "fastparquet", "duckdb", "boto3", "pretty-html-table", "nltk", "loguru",
-                 "ta", "diffusers[torch]", "transformers", "ftfy", "accelerate", "scikit-learn", "pydantic", "fastapi")
+                 "ta", "diffusers[torch]", "transformers", "ftfy", "accelerate", "scikit-learn", "pydantic", "fastapi",
+                 "joblib")
 )
 VOLUME_DIR = "/tm-data"
 stub.volume = Volume.persisted('tm-data-vol')
@@ -55,6 +55,13 @@ def _preprocess_data(df):
     import pandas as pd
     day_of_week = pd.get_dummies(df['day_of_week'], prefix='day_of_week', dtype=float)
     df = pd.concat([df, day_of_week], axis=1).drop('day_of_week', axis=1)
+    # Ensure all day columns are present
+    all_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    for day in all_days:
+        column_name = f'day_of_week_{day}'
+        if column_name not in df.columns:
+            df[column_name] = 0
+
     return df
 
 
@@ -178,23 +185,25 @@ def training_data():
     stub.volume.commit()
 
 
-@stub.function(image=web_image, volumes={VOLUME_DIR: stub.volume}, )
+@stub.function(image=image, volumes={VOLUME_DIR: stub.volume})
 @web_endpoint(method="POST")
 def predict(prediction: Prediction):
+    import joblib
     import numpy as np
     import pandas as pd
-    from sklearn.preprocessing import StandardScaler
-    mean = np.load(Path(VOLUME_DIR, 'scaler_mean.npy'))
-    scale = np.load(Path(VOLUME_DIR, 'scaler_scale.npy'))
+    from tensorflow import keras
+
     df = pd.DataFrame([prediction.dict()])
     df = _preprocess_data(df)
-
-    scaler = StandardScaler()
-    scaler.mean_ = mean
-    scaler.scale_ = scale
-    scaler.transform(df)
-    print(df)
-    return {'result': True}
+    scaler = joblib.load(Path(VOLUME_DIR,'tm_scaler.joblib'))
+    X = scaler.transform(df)
+    dr = joblib.load(Path(VOLUME_DIR,'tm_pca.joblib'))
+    X_transformed = dr.transform(X)
+    model = keras.models.load_model(Path(VOLUME_DIR, 'tm_basic_nn.keras'))
+    pred = model.predict(X_transformed)
+    pred = (pred > 0.5)
+    result = 'BUY' if pred[0][0] else 'SELL'
+    return {'prediction': result}
 
 
 @stub.function(image=image, volumes={VOLUME_DIR: stub.volume},
@@ -207,6 +216,8 @@ def email_snapshot():
     import os
     import smtplib
 
+    import joblib
+    import keras
     import pandas as pd
     from pretty_html_table import build_table
 
@@ -223,7 +234,20 @@ def email_snapshot():
     print(f"Put/Call Open Interest Ratio: {pc_open_interest_ratio:.2f}")
     print(f"Net Delta Positioning: {net_delta:.2f}")
 
-    df = pd.read_parquet(Path(VOLUME_DIR, "training_data.parquet")).tail(2).transpose()
+    td = pd.read_parquet(Path(VOLUME_DIR, "training_data.parquet"))
+    X = td.tail(1)
+    X = _preprocess_data(X)
+    X.drop(columns=['close', 'open', 'high', 'low'], inplace=True)
+    scaler = joblib.load(Path(VOLUME_DIR, 'tm_scaler.joblib'))
+    X_std = scaler.transform(X)
+    dr = joblib.load(Path(VOLUME_DIR, 'tm_pca.joblib'))
+    X_transformed = dr.transform(X_std)
+    model = keras.models.load_model(Path(VOLUME_DIR, 'tm_basic_nn.keras'))
+    pred = model.predict(X_transformed)
+    pred = (pred > 0.5)
+    signal = 'BUY' if pred[0][0] else 'NO BUY'
+
+    df = td.tail(2).transpose()
     final_data_html = build_table(df, 'blue_light', index=True)
     sender_email = os.environ['FROM_EMAIL']
     password = os.environ['EMAIL_SECRET']
@@ -232,6 +256,11 @@ def email_snapshot():
     msg['From'] = "jagolli192@gmail.com"
     msg['To'] = ', '.join(["jagolli192@gmail.com", "rhehdgus10@gmail.com"])
     # msg['To'] = ', '.join(["jagolli192@gmail.com"])
+
+    if signal == "BUY":
+        signal_style = "color: green; font-weight: bold;"
+    else:
+        signal_style = "color: black; font-weight: bold;"
 
     msg['Subject'] = 'TendiesMaker Report'
     html = f"""
@@ -254,6 +283,7 @@ def email_snapshot():
       </head>
       <body>
         <h1>SPY Summary</h1>
+        Signal: <div style="{signal_style}">{signal}</div>
         <table>
           <tr>
             <th>Metric</th>
@@ -289,41 +319,46 @@ def email_snapshot():
 @stub.function(image=image, volumes={VOLUME_DIR: stub.volume},
                secret=Secret.from_name("tm-secrets"))
 def train():
-    import pandas as pd
-    import numpy as np
-
-    from sklearn.decomposition import PCA
-    from sklearn.preprocessing import StandardScaler
-
+    import joblib
     from keras.models import Sequential
     from keras.layers import Dense, Dropout, BatchNormalization
     from keras.callbacks import EarlyStopping, ReduceLROnPlateau
     from keras.regularizers import l1, l2
+    import pandas as pd
+    import numpy as np
+    from sklearn.decomposition import PCA
+    from sklearn.preprocessing import StandardScaler
 
-    df = pd.read_parquet(Path(VOLUME_DIR, "training_data.parquet"))
+
+    df = pd.read_parquet( "training_data.parquet")
     df = _preprocess_data(df)
 
     # define target
     look_forward_days = 3  # You can change this to 2 or 3 as per your strategy
     price_increase_threshold = 0.01  # Define what you consider as a significant increase, e.g., 1%
-    df['max_future_high'] = df['high'].rolling(window=look_forward_days, min_periods=1).max().shift(
-        -look_forward_days + 1)
-    # Create the target by comparing the future price after 'look_forward_days' with the current price
-    df['target'] = ((df['max_future_high'] - df['open']) / df['open']) > price_increase_threshold
+    df_reversed = df.iloc[::-1]
+
+    # Apply the rolling function on the reversed DataFrame
+    df_reversed['max_future_high'] = df_reversed['high'].rolling(window=look_forward_days, min_periods=1).max()
+
+    # Reverse the DataFrame back to original order
+    df['max_future_high'] = df_reversed['max_future_high'].iloc[::-1]
+
+    # Calculate the target
+    df['target'] = ((df['max_future_high'] - df['open']) / df['open']) >= price_increase_threshold
     df['target'] = df['target'].astype(int)
     df = df.iloc[:-1]
 
     Y = df['target'].to_numpy()
     # drop last row
     df.drop(columns=['target', 'max_future_high', 'close', 'open', 'high', 'low'], inplace=True)
-    X = df.to_numpy
-
+    X = df.to_numpy()
     # normalize
     scaler = StandardScaler()
-    scaler.fit(df)
-    X_std = scaler.transform(df)
-    np.save(Path(VOLUME_DIR, 'tm_scaler_mean.npy'), scaler.mean_)
-    np.save(Path(VOLUME_DIR, 'tm_scaler_scale.npy'), scaler.scale_)
+    scaler.fit(X)
+    X_std = scaler.transform(X)
+
+    joblib.dump(scaler, Path(VOLUME_DIR,'tm_scaler.joblib'))
 
     # Compute PCA
     pca = PCA()
@@ -335,6 +370,7 @@ def train():
     # Fit PCA with optimal components
     dr_algorithm = PCA(n_components=optimal_components)
     X_transformed = dr_algorithm.fit_transform(X_std)
+    joblib.dump(dr_algorithm, Path(VOLUME_DIR,'tm_pca.joblib'))
 
     def create_nn_model(optimizer='adam', l1_value=0.01, l2_value=0.01, dropout_rate=0.5):
         model = Sequential()
@@ -353,7 +389,7 @@ def train():
 
     model.fit(X_transformed, Y, epochs=20, batch_size=12, callbacks=[early_stopping, reduce_lr])
 
-    model.save('tm_basic_nn.keras')
+    model.save(Path(VOLUME_DIR, 'tm_basic_nn.keras'))
     stub.volume.commit()
 
 
@@ -367,8 +403,9 @@ def fastapi_app():
 def daily_data_run():
     options_data.remote()
     training_data.remote()
+    train.remote()
 
 
 @stub.local_entrypoint()
 def main():
-    train.remote()
+    train.local()
