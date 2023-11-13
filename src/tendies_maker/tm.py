@@ -209,8 +209,7 @@ def predict(prediction: Prediction):
 @stub.function(image=image, volumes={VOLUME_DIR: stub.volume},
                secret=Secret.from_name("tm-secrets"), schedule=Cron("0 13 * * 1-5"),
                mounts=[Mount.from_local_python_packages("gather", "db", "thinker", "datamodel", "config",
-                                                        "utils")],
-               )
+                                                        "utils")])
 def email_snapshot():
     import datetime
     from email.message import EmailMessage
@@ -317,10 +316,13 @@ def email_snapshot():
         day_of_week=day_of_week,
     )
 
-    response = requests.post("https://jackagolli--tm-predict.modal.run/", json=prediction.dict(), timeout=20.0).json()
+    response = requests.post("https://jackagolli--tm-predict.modal.run/", json=prediction.dict(), timeout=40.0).json()
     signal = response['signal']
-    df = td.tail(2).transpose()
-    final_data_html = build_table(df, 'blue_light', index=True)
+
+    training_data = pd.read_parquet(Path(VOLUME_DIR, "training_data.parquet"))
+
+    training_data_cut = training_data.tail(2).transpose()
+    final_data_html = build_table(training_data_cut, 'blue_light', index=True)
     sender_email = os.environ['FROM_EMAIL']
     password = os.environ['EMAIL_SECRET']
 
@@ -463,12 +465,6 @@ def train():
 
     model.save(Path(VOLUME_DIR, 'tm_basic_nn.keras'))
     stub.volume.commit()
-
-
-@stub.function(image=image)
-@asgi_app()
-def fastapi_app():
-    return web_app
 
 
 @stub.function(schedule=Cron("30 23 * * 1-5"), timeout=3600)
