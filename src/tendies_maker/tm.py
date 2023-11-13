@@ -212,41 +212,113 @@ def predict(prediction: Prediction):
                                                         "utils")],
                )
 def email_snapshot():
+    import datetime
     from email.message import EmailMessage
     import os
+    import requests
     import smtplib
 
-    import joblib
-    import keras
+    from alpaca.data import StockHistoricalDataClient, StockLatestBarRequest
     import pandas as pd
     from pretty_html_table import build_table
 
-    from gather import get_options_snapshot
+    from datamodel import TrainingData as td
+    from gather import (get_dividends, get_news, get_market_holidays, get_options_snapshot, get_macro_econ_data,
+                        get_price_history)
+    from thinker import news_sentiment_analysis, append_technical_indicators, append_fluctuations
 
-    options_df = get_options_snapshot('SPY')
+    ticker = 'SPY'
+
+    options_df = get_options_snapshot(ticker)
     put_options = options_df[options_df['details_contract_type'] == 'put']
     call_options = options_df[options_df['details_contract_type'] == 'call']
     pc_volume_ratio = put_options['day_volume'].sum() / call_options['day_volume'].sum()
     pc_open_interest_ratio = put_options['open_interest'].sum() / call_options['open_interest'].sum()
     net_delta = call_options['greeks_delta'].sum() + put_options['greeks_delta'].sum()
 
-    print(f"Put/Call Volume Ratio: {pc_volume_ratio:.2f}")
-    print(f"Put/Call Open Interest Ratio: {pc_open_interest_ratio:.2f}")
-    print(f"Net Delta Positioning: {net_delta:.2f}")
 
-    td = pd.read_parquet(Path(VOLUME_DIR, "training_data.parquet"))
-    X = td.tail(1)
-    X = _preprocess_data(X)
-    X.drop(columns=['close', 'open', 'high', 'low'], inplace=True)
-    scaler = joblib.load(Path(VOLUME_DIR, 'tm_scaler.joblib'))
-    X_std = scaler.transform(X)
-    dr = joblib.load(Path(VOLUME_DIR, 'tm_pca.joblib'))
-    X_transformed = dr.transform(X_std)
-    model = keras.models.load_model(Path(VOLUME_DIR, 'tm_basic_nn.keras'))
-    pred = model.predict(X_transformed)
-    pred = (pred > 0.5)
-    signal = 'BUY' if pred[0][0] else 'NO BUY'
+    stock_client = StockHistoricalDataClient(os.environ["ALPACA_API_KEY"], os.environ["ALPACA_SECRET_KEY"])
+    bars = stock_client.get_stock_latest_bar(StockLatestBarRequest(symbol_or_symbols='SPY'))
+    df = pd.DataFrame(index=pd.MultiIndex.from_tuples([(ticker, bars['SPY'].timestamp)],
+                                                      names=['symbol', 'timestamp']))
+    df['close'] = bars['SPY'].close
+    df['open'] = bars['SPY'].open
+    df['high'] = bars['SPY'].high
+    df['low'] = bars['SPY'].low
+    df['volume'] = bars['SPY'].volume
+    df['trade_count'] = bars['SPY'].trade_count
+    df['vwap'] = bars['SPY'].vwap
 
+    price_history = get_price_history([ticker], 90)
+    price_history = pd.concat([price_history, df])
+    price_history = append_technical_indicators(price_history)
+    price_history, result = append_fluctuations(price_history)
+    current = price_history.iloc[-1].to_dict()
+
+
+    dividends_df = get_dividends(ticker).iloc[0]
+    dividend_yield = (dividends_df['cash_amount'] * dividends_df['frequency'] / bars[ticker].close) * 100
+    days_since_last_dividend = (datetime.datetime.today() - datetime.datetime.strptime(
+        dividends_df['ex_dividend_date'], "%Y-%m-%d")).days
+
+    econ = get_macro_econ_data(False)
+    econ = econ.resample('D').ffill().bfill().ffill()
+    econ = econ.dropna().iloc[-1].to_dict()
+    fomc_dates = pd.to_datetime(td.scrape_fomc_calendar(True))
+    days_to_fomc = (fomc_dates[0] - datetime.datetime.today()).days + 1
+    today = datetime.datetime.now()
+    if today.weekday() == 5:
+        last_weekday = today - datetime.timedelta(days=1)
+    elif today.weekday() == 6:
+        last_weekday = today - datetime.timedelta(days=2)
+    else:
+        last_weekday = today
+    day_of_week = last_weekday.strftime('%A')
+
+    closed_dates = get_market_holidays()
+    future_dates = [datetime.datetime.strptime(date, "%Y-%m-%d").date() for date in closed_dates]
+    future_dates.sort()
+    for date in future_dates:
+        if date > datetime.datetime.today().date():
+            days_to_holiday = (date - datetime.datetime.today().date()).days
+            break
+    news = get_news(ticker)
+    news_sentiment = news_sentiment_analysis(news, datetime.datetime.now())
+
+    prediction = Prediction(
+        volume=current['volume'],
+        trade_count=current['trade_count'],
+        vwap=current['vwap'],
+        rsi=current['rsi'],
+        bbipband=current['bbipband'],
+        MACD_12_26=current['MACD_12_26'],
+        ichi=current['ichi'],
+        tenkan_kijun_cross=current['tenkan_kijun_cross'],
+        price_vs_senkou_a=current['price_vs_senkou_a'],
+        price_vs_senkou_b=current['price_vs_senkou_b'],
+        mfi_14=current['mfi_14'],
+        intraday_change=current['intraday_change'],
+        days_since_last_spike=current['days_since_last_spike'],
+        PCE=econ['PCE'],
+        unemployment=econ['unemployment'],
+        inflation_expectation=econ['inflation_expectation'],
+        job_openings=econ['job_openings'],
+        fed_funds_rate=econ['fed_funds_rate'],
+        real_m2=econ['real_m2'],
+        real_gdp=econ['real_gdp'],
+        retail_sales=econ['retail_sales'],
+        existing_home_sales=econ['existing_home_sales'],
+        days_to_fomc=days_to_fomc,
+        pc_ratio_volume=pc_volume_ratio,
+        days_to_next_holiday=days_to_holiday,
+        dividend_yield=dividend_yield,
+        time_since_last_dividend=days_since_last_dividend,
+        news_sentiment=news_sentiment,
+        day_of_week=day_of_week,
+    )
+
+    response = requests.post("https://jackagolli--tm-predict.modal.run/", json=prediction.dict(), timeout=20.0).json()
+    signal = response['signal']
     df = td.tail(2).transpose()
     final_data_html = build_table(df, 'blue_light', index=True)
     sender_email = os.environ['FROM_EMAIL']
