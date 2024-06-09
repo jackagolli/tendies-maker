@@ -270,6 +270,7 @@ def get_dividends(ticker):
 
 
 def get_price_history(tickers, delta):
+
     stock_client = StockHistoricalDataClient(os.environ["ALPACA_API_KEY"], os.environ["ALPACA_SECRET_KEY"])
     if not delta:
         start_date = datetime.datetime(datetime.datetime.today().year, 1, 1)
@@ -282,6 +283,8 @@ def get_price_history(tickers, delta):
     )
     bars = stock_client.get_stock_bars(request_params)
     return bars.df
+
+
 
 
 def gather_multi(syms, **kwargs):
