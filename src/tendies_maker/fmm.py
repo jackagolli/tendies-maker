@@ -1,9 +1,14 @@
+import os
+
+from dotenv import load_dotenv, find_dotenv
 from polygon import RESTClient
 import pandas as pd
 
 from thinker import append_technical_indicators
 
-client = RESTClient(api_key="VcmqzRfUqWkFDNWwxVosKglCf9LyltUN")
+load_dotenv(find_dotenv())
+
+client = RESTClient(api_key=os.environ['POLYGON_API_KEY'])
 
 start_date = "2023-01-01"
 end_date = "2023-12-31"
